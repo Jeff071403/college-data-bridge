@@ -1,0 +1,202 @@
+================================================================================
+          MOU LIFECYCLE & DOCUMENT MANAGEMENT SYSTEM
+              SYSTEM DOCUMENTATION & USER MANUAL
+================================================================================
+
+TABLE OF CONTENTS
+--------------------------------------------------------------------------------
+1. Executive Summary & Purpose
+2. Technology Stack & System Architecture
+3. User Roles & Access Control
+4. MOU Lifecycle & Status Workflow
+5. Dynamic MOU Templates & Field Customization
+6. Signed Document Upload & Smart Expiry Date Calculator
+7. Approval, Verification & Rejection Workflow
+8. Automatic Daily Expiry Reminders & Notifications
+9. Executive Dashboards & Recharts Analytics
+10. Folder Explorer & Role-Based Permissions
+11. Security Audit Trail & System Map
+12. Operational Step-by-Step Guide for Users & Admins
+
+================================================================================
+1. EXECUTIVE SUMMARY & PURPOSE
+================================================================================
+The MOU Lifecycle & Document Management System is an enterprise-grade platform 
+specifically designed for universities and colleges to manage Memorandums of 
+Understanding (MOUs), industrial partnerships, student internship agreements, 
+and joint research initiatives.
+
+Key Problem Solved:
+- Replaces unorganized local drive folder storage with a centralized, searchable repository.
+- Eliminates manual date tracking through automated expiry date calculations based on 
+  the actual Signed Date (not upload date).
+- Provides proactive warning alerts (30, 15, 7, and 1 day before expiration).
+- Enables one-click renewal to seamlessly roll over expiring agreements without data loss.
+
+================================================================================
+2. TECHNOLOGY STACK & SYSTEM ARCHITECTURE
+================================================================================
+Frontend:
+- React (Vite build engine)
+- Material-UI (MUI v9) for enterprise UI components & theming engine
+- Recharts for animated data visualizations
+- Lucide & MUI Icons for visual cues
+- Custom CSS Animation System (Plus Jakarta Sans & Inter typography)
+
+Backend:
+- Python Django REST Framework (DRF)
+- SQLite / PostgreSQL database support
+- JWT Authentication & Session management
+- Custom Django App Architecture: `mous`, `folders`, `files`, `users`, `roles`, 
+  `permissions`, `notifications`, `activity_logs`
+
+================================================================================
+3. USER ROLES & ACCESS CONTROL
+================================================================================
+1. Super Admin:
+   - Full system privileges bypass checks.
+   - Can manage all folders, documents, user accounts, and system settings.
+   - Access to full security audit logs and custom permission overrides.
+
+2. Lawyer / MOU Administrator (Admin Role):
+   - Uploads original draft MOUs and assigns them to departments.
+   - Configures dynamic MOU Templates and custom fields.
+   - Reviews, approves, or rejects signed MOUs submitted by departments.
+   - Executes One-Click Renewals.
+
+3. Department User / Coordinator:
+   - Accesses MOUs shared with their assigned department (Engineering, Medical, Commerce, etc.).
+   - Uploads executed Signed MOU documents.
+   - Sets actual Signed Date and fills summary/beneficiaries forms.
+   - Previews calculated expiry dates.
+
+4. View Only User:
+   - Can search, view, and read assigned MOUs.
+   - Cannot create, edit, approve, or delete records.
+
+================================================================================
+4. MOU LIFECYCLE & STATUS WORKFLOW
+================================================================================
+Every MOU progresses through a defined multi-step lifecycle:
+
+  [1. Draft] ➔ [2. Shared] ➔ [3. Signed] ➔ [4. Pending Verification] ➔ [5. Active] ➔ [6. Expiring Soon] ➔ [7. Expired / Renewed]
+
+Stage Details:
+- Draft: MOU draft created by Administrator. Private to creator.
+- Shared: MOU distributed to assigned department coordinators for review.
+- Signed: Executed agreement document uploaded by department with Signed Date.
+- Pending Verification: Agreement submitted for legal review and approval.
+- Active: MOU approved by Administrator. Expiry date monitored automatically.
+- Expiring Soon: Automatically triggered when Expiry Date is within 30 days.
+- Expired / Renewed: Passed end date (Expired) or renewed into a new version (Renewed).
+
+================================================================================
+5. DYNAMIC MOU TEMPLATES & FIELD CUSTOMIZATION
+================================================================================
+The system supports customizable MOU Templates stored as JSON schemas. Administrators 
+can create new templates on the `/templates` page without changing code.
+
+Default Seeding Templates:
+- Internship: Duration, Eligible Students, Monthly Stipend
+- Placement: Eligible Departments, Expected CTC Package, Selection Process
+- Research: Funding Amount, Research Domain, Principal Investigator
+- Industry Collaboration: Co-branded Lab Setup, Industry Mentor
+
+Template Notes:
+Each template contains a "Template Notes" field where administrators explain the 
+purpose of the template and how non-technical coordinators should complete the fields.
+
+================================================================================
+6. SIGNED DOCUMENT UPLOAD & SMART EXPIRY DATE CALCULATOR
+================================================================================
+Formula:
+  Calculated Expiry Date = Signed Date + Duration (Months)
+
+How It Works:
+1. When uploading a signed MOU document, the user selects the actual `Signed Date` 
+   using a date picker (defaults to system current date, but fully editable).
+2. The duration (e.g. 12 Months) is read automatically from the agreement template.
+3. The system computes the exact Expiry Date in real-time and displays a live preview:
+   Example: Signed Date = 15 Aug 2026, Duration = 6 Months ➔ Expiry Date = 15 Feb 2027.
+4. Expiry is ALWAYS computed from the Signed Date, NOT the upload timestamp.
+
+================================================================================
+7. APPROVAL, VERIFICATION & REJECTION WORKFLOW
+================================================================================
+1. Department submits signed MOU ➔ Status becomes `Pending Verification`.
+2. Administrator receives an in-app notification and email alert.
+3. Administrator reviews document details on `/mou/:id` page and clicks:
+   - [Approve MOU]: Status transitions to `Active`. System records approval in audit log.
+   - [Reject / Request Changes]: Administrator enters remarks. Status returns to `Draft`.
+
+================================================================================
+8. AUTOMATIC DAILY EXPIRY REMINDERS & NOTIFICATIONS
+================================================================================
+The background scheduler inspects all Active MOUs daily and fires notifications:
+- 30 Days Before Expiry: Green warning alert sent to Admin & Coordinator.
+- 15 Days Before Expiry: Amber warning alert.
+- 7 Days Before Expiry: Orange urgent warning alert.
+- 1 Day Before Expiry: Red critical warning alert.
+- Expiry Day: Final expiration notification; status auto-updates to `Expired`.
+
+Status Pill Colors & Badges:
+- Green Pill + Check Icon: Active (> 30 Days remaining)
+- Yellow/Orange Pill + Warning Icon: Expiring Soon (≤ 30 Days)
+- Red Pill + Cancel Icon: Expired / Rejected
+- Slate Pill + Edit Icon: Draft
+
+================================================================================
+9. EXECUTIVE DASHBOARDS & RECHARTS ANALYTICS
+================================================================================
+- Stat Highlight Cards: Animated Count-Up numbers, status color glows.
+- Growth Trend Chart: Recharts smooth Area Chart showing monthly MOU activity.
+- Department Distribution: Recharts Donut Pie Chart breakdown.
+- Disk Storage Widget: Live server space utilization meter.
+
+================================================================================
+10. FOLDER REPOSITORY & ROLE-BASED PERMISSIONS
+================================================================================
+Folder Hierarchy:
+  MOU Repository
+    ├── Engineering (CSE / ECE)
+    ├── Medical & Health Sciences
+    ├── Commerce & Business
+    └── Arts & Humanities
+
+Permissions (per folder):
+- View, Download, Upload, Edit, Delete, Share.
+- Configured by Super Admin on `/users` page via the Permission Override Dialog.
+
+================================================================================
+11. SECURITY AUDIT TRAIL & SYSTEM MAP
+================================================================================
+- Security Audit Trail (`/logs`): Permanent, read-only log recording user, timestamp, 
+  action, module, and IP address.
+- System Map (`/system-map`): Interactive visual diagram explaining the 7 lifecycle 
+  stages, user permissions per stage, and fired notifications.
+
+================================================================================
+12. OPERATIONAL STEP-BY-STEP GUIDE
+================================================================================
+How to Create a New MOU:
+1. Navigate to "MOU Repository" (`/mou-repository`) and click "+ Create New MOU".
+2. Fill Step 1 (Title, Partner Org, Target Department, Template).
+3. Fill Step 2 (Dynamic Template Fields & Summary).
+4. Fill Step 3 (Duration, Coordinator Email, Partner Email).
+5. Step 4 Review & Submit. MOU is saved and shared.
+
+How to Submit a Signed MOU:
+1. Navigate to `/mou-repository` or `/shared`.
+2. Locate agreement in Draft status and click "Upload Signed".
+3. Select Signed Date. Verify the computed Expiry Date in the live preview box.
+4. Click "Submit & Verify".
+
+How to Execute One-Click Renewal:
+1. Open any Active or Expired MOU on `/mou/:id` page.
+2. Click "One-Click Renewal".
+3. System automatically clones previous data into a new renewal draft while keeping 
+   historical version links intact.
+
+================================================================================
+                            END OF DOCUMENTATION
+================================================================================

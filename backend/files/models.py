@@ -1,0 +1,66 @@
+from django.db import models
+from django.conf import settings
+from folders.models import Folder
+import os
+
+def file_upload_path(instance, filename):
+    # Store files grouped by their folder ID
+    folder_id = instance.folder.id if instance.folder else 'root'
+    return os.path.join('folders', str(folder_id), filename)
+
+def file_version_upload_path(instance, filename):
+    # Store versions grouped by parent file ID and version number
+    return os.path.join('versions', f"file_{instance.file.id}", f"v{instance.version_number}", filename)
+
+class File(models.Model):
+    name = models.CharField(max_length=255)
+    size = models.BigIntegerField()  # File size in bytes
+    file_type = models.CharField(max_length=100)  # MIME type or extension
+    
+    folder = models.ForeignKey(
+        Folder,
+        on_delete=models.CASCADE,
+        related_name='files'
+    )
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='uploaded_files'
+    )
+    file_field = models.FileField(upload_to=file_upload_path)
+    version_number = models.IntegerField(default=1)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.name} (v{self.version_number})"
+
+class FileVersion(models.Model):
+    file = models.ForeignKey(
+        File,
+        on_delete=models.CASCADE,
+        related_name='versions'
+    )
+    version_number = models.IntegerField()
+    name = models.CharField(max_length=255)
+    size = models.BigIntegerField()
+    file_type = models.CharField(max_length=100)
+    
+    file_field = models.FileField(upload_to=file_version_upload_path)
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='uploaded_file_versions'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-version_number']
+
+    def __str__(self):
+        return f"{self.name} - Version {self.version_number} (File ID: {self.file.id})"
