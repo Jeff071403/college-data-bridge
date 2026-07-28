@@ -3,25 +3,18 @@ import os
 from datetime import timedelta
 import psycopg2
 import environ
-<<<<<<< HEAD
-
-BASE_DIR = Path(__file__).resolve().parent.parent
-
-# Initialize env
-env = environ.Env()
-
-# Read .env file if it exists
-environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
-
-SECRET_KEY = env('SECRET_KEY', default='django-insecure-+=t3a@n8j5g#$-rdym+*70zi*_8fvf=r*-jh5fm^u8#-6f%j7o')
-
-DEBUG = env.bool('DEBUG', default=True)
-
-ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['*'])
-=======
 from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Initialize environment variables reader
+env = environ.Env(
+    DEBUG=(bool, False),
+    ALLOWED_HOSTS=(list, ['*'])
+)
+
+# Read environment variables
+environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 
 # Initialize environment variables reader
 env = environ.Env(
@@ -127,21 +120,12 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'backend.wsgi.application'
 
-<<<<<<< HEAD
 # Database Configuration (PostgreSQL with SQLite fallback)
 DB_NAME = env('DB_NAME', default='mou_dashboard')
 DB_USER = env('DB_USER', default='postgres')
 DB_PASSWORD = env('DB_PASSWORD', default='password')
 DB_HOST = env('DB_HOST', default='localhost')
 DB_PORT = env('DB_PORT', default='5432')
-=======
-DB_NAME = env('DB_NAME')
-DB_USER = env('DB_USER')
-DB_PASSWORD = env('DB_PASSWORD')
-DB_HOST = env('DB_HOST', default='localhost')
-DB_PORT = env('DB_PORT', default='5432')
-
->>>>>>> 9a2f085 (feat: consolidate master data into settings, fix folder/file CRUD, enforce Google Drive primary storage, update user permissions, and streamline user management UI)
 
 DATABASES = {}
 

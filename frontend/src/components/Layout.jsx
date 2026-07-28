@@ -231,35 +231,6 @@ const Layout = ({ children }) => {
         <Avatar sx={{ background: 'linear-gradient(135deg, #4F46E5, #7C3AED)', width: 36, height: 36, flexShrink: 0, boxShadow: '0 2px 8px rgba(79,70,229,0.35)' }}>
           <CloudQueueIcon sx={{ color: '#ffffff', fontSize: '1.15rem' }} />
         </Avatar>
-<<<<<<< HEAD
-        {!sidebarCollapsed && (
-          <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 800, letterSpacing: '0.5px', fontSize: '0.95rem', background: 'linear-gradient(135deg, #4F46E5, #7C3AED)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', whiteSpace: 'nowrap', lineHeight: 1.2 }}>
-              MCC LEGAL
-            </Typography>
-            <Typography variant="caption" sx={{ fontWeight: 600, letterSpacing: '0.5px', fontSize: '0.75rem', color: 'text.secondary', whiteSpace: 'nowrap', lineHeight: 1.2 }}>
-              Documents
-            </Typography>
-          </Box>
-        )}
-      </Box>
-      <Divider />
-      
-      {/* User Quick Info */}
-      {!sidebarCollapsed && (
-        <Box sx={{ p: 2.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Avatar sx={{ width: 40, height: 40, border: '2px solid', borderColor: 'primary.main', background: 'linear-gradient(135deg, #4F46E5, #7C3AED)', fontSize: '0.95rem', fontWeight: 700 }}>
-            {user?.name?.charAt(0).toUpperCase()}
-          </Avatar>
-          <Box sx={{ overflow: 'hidden' }}>
-            <Typography variant="subtitle2" noWrap sx={{ fontWeight: 700, color: 'text.primary', fontSize: '0.85rem' }}>
-              {user?.name}
-            </Typography>
-            <Typography variant="caption" noWrap sx={{ display: 'block', color: 'text.secondary', fontSize: '0.72rem' }}>
-              {user?.role?.name || 'User'}
-            </Typography>
-          </Box>
-=======
         <Box sx={{
           maxWidth: isCollapsed ? 0 : 160,
           overflow: 'hidden',
@@ -277,7 +248,6 @@ const Layout = ({ children }) => {
           }}>
             MOU DocHub
           </Typography>
->>>>>>> 9a2f085 (feat: consolidate master data into settings, fix folder/file CRUD, enforce Google Drive primary storage, update user permissions, and streamline user management UI)
         </Box>
 
         {/* Lock / Pin Button — visible only when expanded */}

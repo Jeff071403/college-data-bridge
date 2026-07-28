@@ -27,10 +27,11 @@ backend/media/*
 .DS_Store
 Thumbs.db
 *.log
-# Environment variables
+# Environment & Secret Credentials
 .env
 .env.local
 .env.*
 backend/.env
-credentials/google-drive.json
-backend/backend/credentials/*.json
+credentials/
+backend/credentials/
+backend/backend/credentials/

@@ -30,6 +30,11 @@ class FolderViewSet(viewsets.ModelViewSet):
         'partial_update': 'rename_folder',
         'destroy': 'delete_folder',
         'contents': 'view_folder',
+        'root_contents': 'view_folder',
+        'create_custom': 'create_folder',
+        'rename_custom': 'rename_folder',
+        'delete_custom': 'delete_folder',
+        'drive_status': 'view_folder',
         'assign_access': 'manage_users', # Only admins manage access rules
         'permissions': 'manage_users',
     }
