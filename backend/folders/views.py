@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
+User = get_user_model()
 from permissions.custom_permissions import HasDynamicPermission
 from activity_logs.utils import log_activity
 from notifications.utils import create_notification, notify_admins
@@ -85,6 +86,7 @@ class FolderViewSet(viewsets.ModelViewSet):
         'delete_custom': 'delete_folder',
         'drive_status': 'view_folder',
         'assign_access': 'manage_users', # Only admins manage access rules
+        'revoke_access': 'manage_users',
         'permissions': 'manage_users',
     }
 
@@ -506,6 +508,37 @@ class FolderViewSet(viewsets.ModelViewSet):
         folder = self.get_object()
         permissions = FolderPermission.objects.filter(folder=folder)
         return Response(FolderPermissionSerializer(permissions, many=True).data)
+
+    @action(detail=True, methods=['post'], url_path='revoke-access')
+    def revoke_access(self, request, pk=None):
+        folder = self.get_object()
+        user_id = request.data.get('user_id')
+        
+        if not user_id:
+            return Response({"user_id": ["This field is required."]}, status=status.HTTP_400_BAD_REQUEST)
+            
+        target_user = get_object_or_404(User, id=user_id)
+        
+        # Delete the explicit access rule
+        deleted_count, _ = FolderPermission.objects.filter(user=target_user, folder=folder).delete()
+        
+        if deleted_count > 0:
+            log_activity(
+                request.user, 
+                f"Removed explicit access rule to folder '{folder.name}' for user {target_user.email}", 
+                "folders", 
+                request
+            )
+            
+            create_notification(
+                target_user, 
+                "Folder Access Removed", 
+                f"Your explicit access rule to folder '{folder.name}' has been removed.",
+                metadata={'action': 'folder_share_removed', 'folder_id': folder.id, 'folder_name': folder.name}
+            )
+            return Response({"detail": "Access rule removed successfully."})
+        else:
+            return Response({"detail": "No explicit access rule found for this user and folder."}, status=status.HTTP_404_NOT_FOUND)
 
     @action(detail=True, methods=['post'], url_path='assign-access')
     def assign_access(self, request, pk=None):

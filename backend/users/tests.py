@@ -116,8 +116,8 @@ class DocumentManagementSystemTests(TestCase):
         token = self.get_jwt_token("user@test.edu", "password123")
         self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + token)
 
-        # 1. By default, Normal User can access root folder (it falls back to True)
-        self.assertTrue(root_folder.has_access(self.normal_user))
+        # 1. By default, Normal User cannot access root folder (it falls back to False)
+        self.assertFalse(root_folder.has_access(self.normal_user))
         
         # 2. Grant explicit access on root folder
         FolderPermission.objects.create(user=self.normal_user, folder=root_folder, is_granted=True)

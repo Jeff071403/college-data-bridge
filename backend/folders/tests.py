@@ -33,6 +33,10 @@ class FolderSyncAPITests(APITestCase):
             codename="delete_folder", 
             defaults={"name": "Delete Folder", "description": "Can delete folders"}
         )
+        self.manage_users_perm, _ = Permission.objects.get_or_create(
+            codename="manage_users",
+            defaults={"name": "Manage Users", "description": "Can manage users"}
+        )
 
         self.admin_role, _ = Role.objects.get_or_create(
             name="Admin", 
@@ -40,10 +44,10 @@ class FolderSyncAPITests(APITestCase):
         )
         
         # Map permissions to Admin role
-        for perm in [self.view_folder_perm, self.create_folder_perm, self.create_nested_folder_perm, self.rename_folder_perm, self.delete_folder_perm]:
+        for perm in [self.view_folder_perm, self.create_folder_perm, self.create_nested_folder_perm, self.rename_folder_perm, self.delete_folder_perm, self.manage_users_perm]:
             RolePermission.objects.get_or_create(role=self.admin_role, permission=perm)
 
-        # 2. Create testing user
+        # 2. Create testing users
         self.user = User.objects.create_user(
             email="admin@college.edu",
             password="AdminPass123!",
@@ -51,6 +55,19 @@ class FolderSyncAPITests(APITestCase):
             role=self.admin_role,
             designation="Administrator",
             department="IT",
+            status="Active"
+        )
+        self.normal_role, _ = Role.objects.get_or_create(
+            name="User", 
+            defaults={"description": "Standard User"}
+        )
+        self.other_user = User.objects.create_user(
+            email="normal@college.edu",
+            password="UserPass123!",
+            name="Normal User",
+            role=self.normal_role,
+            designation="Analyst",
+            department="Physics",
             status="Active"
         )
         self.client.force_authenticate(user=self.user)
@@ -134,3 +151,28 @@ class FolderSyncAPITests(APITestCase):
         # Check database deletion
         self.assertFalse(Folder.objects.filter(id=folder.id).exists())
         mock_delete_file.assert_called_once_with("drive_delete_id_888")
+
+    def test_assign_and_revoke_access(self):
+        # Create a folder
+        folder = Folder.objects.create(name="Shared Folder", created_by=self.user)
+        
+        # Verify other user has no access initially (fallback is False)
+        self.assertFalse(folder.has_access(self.other_user))
+
+        # Assign access via API
+        assign_url = reverse('folder-assign-access', kwargs={'pk': folder.id})
+        response = self.client.post(assign_url, {'user_id': self.other_user.id, 'is_granted': True}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Verify access granted in DB
+        self.assertTrue(FolderPermission.objects.filter(user=self.other_user, folder=folder, is_granted=True).exists())
+        self.assertTrue(folder.has_access(self.other_user))
+
+        # Revoke access via API
+        revoke_url = reverse('folder-revoke-access', kwargs={'pk': folder.id})
+        response = self.client.post(revoke_url, {'user_id': self.other_user.id}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Verify access rule deleted and access revoked
+        self.assertFalse(FolderPermission.objects.filter(user=self.other_user, folder=folder).exists())
+        self.assertFalse(folder.has_access(self.other_user))

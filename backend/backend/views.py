@@ -29,7 +29,7 @@ class DashboardStatsView(APIView):
         active_users = User.objects.filter(status='Active').count() if is_admin else 0
 
         # Folder and File counts
-        if user.role and user.role.name == "Super Admin":
+        if user.role and user.role.name in ["Super Admin", "Admin"]:
             folders_qs = Folder.objects.all()
             files_qs = File.objects.all()
         else:
@@ -107,8 +107,24 @@ class DashboardStatsView(APIView):
             "total_folders": total_folders,
             "total_files": total_files,
             "recent_uploads": recent_files_serializer.data,
+            "recent_folders": recent_folders_serializer.data,
             "recent_activities": activities_data,
-            "latest_notifications": notifications_serializer.data
+            "latest_notifications": notifications_serializer.data,
+            "storage": {
+                "disk_total_bytes": disk_total,
+                "disk_used_bytes": disk_used,
+                "disk_free_bytes": disk_free,
+                "breakdown": {
+                    "pdf": pdf_size,
+                    "image": image_size,
+                    "doc": doc_size,
+                    "xls": xls_size,
+                    "ppt": ppt_size,
+                    "video": video_size,
+                    "audio": audio_size,
+                    "total": total_db_size
+                }
+            }
         })
 
 

@@ -37,15 +37,16 @@ class Folder(models.Model):
         """
         Recursively checks folder access up the ancestral chain.
         1. Unauthenticated users have no access.
-        2. Super Admin or creator of this folder / ancestor folder has full access.
-        3. Check for explicit FolderPermission (grant/revoke).
-        4. Check for dynamic MOU sharing access.
-        5. Default fallback: authenticated users have access unless explicitly revoked.
+        2. Super Admin or Admin has full access by default.
+        3. Creator of this folder / ancestor folder has full access.
+        4. Check for explicit FolderPermission (grant/revoke).
+        5. Check for dynamic MOU sharing access.
+        6. Default fallback: False (restrictive default for standard users).
         """
         if not user or not user.is_authenticated:
             return False
             
-        if user.role and user.role.name == "Super Admin":
+        if user.role and user.role.name in ["Super Admin", "Admin"]:
             return True
 
         current = self
@@ -64,8 +65,8 @@ class Folder(models.Model):
         if share_perm is not None:
             return True
 
-        # Default fallback for authenticated users
-        return True
+        # Default fallback for authenticated users (restrictive default for standard users)
+        return False
 
 def choose_higher_permission(p1, p2):
     levels = {
@@ -130,6 +131,10 @@ class FolderPermission(models.Model):
         related_name='folder_permissions'
     )
     is_granted = models.BooleanField(default=True) # True = Granted, False = Revoked
+    can_read = models.BooleanField(default=True)
+    can_download = models.BooleanField(default=True)
+    can_upload = models.BooleanField(default=False)
+    can_delete_own_uploads = models.BooleanField(default=False)
 
     class Meta:
         unique_together = ('user', 'folder')

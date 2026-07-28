@@ -188,7 +188,7 @@ const Layout = ({ children }) => {
     { text: 'Reports & Stats', icon: <AssessmentIcon />,         path: '/reports',    permission: 'view_dashboard', iconColor: '#10B981' },
     { text: 'MOU Templates',   icon: <ExtensionIcon />,          path: '/templates',  permission: 'manage_users',   iconColor: '#F59E0B' },
     { text: 'MOU Repositories', icon: <FolderCopyIcon />,          path: '/explorer',   permission: 'view_folder',    iconColor: '#0EA5E9' },
-    { text: 'User Management', icon: <ManageAccountsIcon />,      path: '/users',      permission: 'view_dashboard', iconColor: '#EC4899' },
+    { text: 'User Management', icon: <ManageAccountsIcon />,      path: '/users',      permission: 'manage_users',   iconColor: '#EC4899' },
     { text: 'Activity Logs',   icon: <AdminPanelSettingsIcon />,  path: '/logs',       permission: 'manage_users',   iconColor: '#F97316' },
     { text: 'System Settings', icon: <SettingsIcon />,           path: '/settings',   permission: 'view_dashboard', iconColor: '#64748B' },
     { text: 'System Map',      icon: <MapIcon />,                 path: '/system-map', permission: 'view_dashboard', iconColor: '#6366F1' },
@@ -346,6 +346,7 @@ const Layout = ({ children }) => {
       <List sx={{ px: 0.5, py: 0.5, flexGrow: 1, overflowY: 'auto', overflowX: 'hidden' }}>
         {menuItems.map((item) => {
           if (item.permission && !hasPermission(item.permission)) return null;
+          if (['/users', '/departments', '/settings'].includes(item.path) && user?.role?.name?.toLowerCase() === 'user') return null;
           const isSelected = location.pathname === item.path;
           return (
             <ListItem key={item.text} disablePadding sx={{ mb: 0.25 }}>
@@ -1055,7 +1056,7 @@ const Layout = ({ children }) => {
                   <ArrowForwardIosIcon sx={{ fontSize: '0.65rem', color: 'text.secondary' }} />
                 </ListItemButton>
 
-                {hasPermission('manage_users') && (
+                {hasPermission('manage_users') && user?.role?.name?.toLowerCase() !== 'user' && (
                   <ListItemButton onClick={() => handleCommandAction('/users')} sx={{ py: 1.2, px: 2.5, gap: 2 }}>
                     <ManageAccountsIcon sx={{ color: '#8b5cf6', fontSize: '1.2rem' }} />
                     <ListItemText primary="Go to User Management" primaryTypographyProps={{ fontSize: '0.9rem', fontWeight: 600 }} />
@@ -1137,7 +1138,7 @@ const Layout = ({ children }) => {
               )}
 
               {/* USERS SECTION (ADMIN ONLY) */}
-              {cmdResults.users && cmdResults.users.length > 0 && (
+              {cmdResults.users && cmdResults.users.length > 0 && user?.role?.name?.toLowerCase() !== 'user' && (
                 <Box>
                   <Typography variant="caption" sx={{ display: 'block', px: 2.5, py: 1, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'text.secondary', bgcolor: 'action.hover' }}>
                     Users ({cmdResults.users.length})
@@ -1161,7 +1162,7 @@ const Layout = ({ children }) => {
               )}
 
               {/* EMPTY STATE INSIDE DIALOG */}
-              {cmdResults.folders.length === 0 && cmdResults.files.length === 0 && (!cmdResults.users || cmdResults.users.length === 0) && (
+              {cmdResults.folders.length === 0 && cmdResults.files.length === 0 && (!cmdResults.users || cmdResults.users.length === 0 || user?.role?.name?.toLowerCase() === 'user') && (
                 <Box sx={{ p: 5, textAlign: 'center', color: 'text.secondary' }}>
                   <SearchIcon sx={{ fontSize: 32, mb: 1, opacity: 0.4 }} />
                   <Typography variant="body2" sx={{ fontStyle: 'italic' }}>

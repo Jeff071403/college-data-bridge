@@ -198,7 +198,6 @@ const FolderExplorer = () => {
 
   const handleMenuClose = () => {
     setMenuAnchor(null);
-    setActiveItem(null);
   };
 
   // Add Folder
@@ -335,6 +334,20 @@ const FolderExplorer = () => {
       setSelectedUserForAccess(null);
     } catch (err) {
       console.error("Failed to grant folder access:", err);
+    }
+  };
+
+  const handleRevokeAccess = async (targetUserId) => {
+    if (!activeItem?.data?.id) return;
+    try {
+      await api.post(`/api/folders/${activeItem.data.id}/revoke-access/`, {
+        user_id: targetUserId
+      });
+      // Reload access list
+      const res = await api.get(`/api/folders/${activeItem.data.id}/permissions/`);
+      setAccessList(res.data);
+    } catch (err) {
+      console.error("Failed to revoke folder access:", err);
     }
   };
 
@@ -1018,7 +1031,7 @@ const FolderExplorer = () => {
       </Dialog>
 
       {/* Rename Dialog */}
-      <Dialog open={renameDialogOpen} onClose={() => setRenameDialogOpen(false)}>
+      <Dialog open={renameDialogOpen} onClose={() => { setRenameDialogOpen(false); setActiveItem(null); }}>
         <form onSubmit={handleRenameSubmit}>
           <DialogTitle>Rename {activeItem?.type === 'folder' ? 'Folder' : 'File'}</DialogTitle>
           <DialogContent sx={{ minWidth: 320 }}>
@@ -1034,14 +1047,14 @@ const FolderExplorer = () => {
             />
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setRenameDialogOpen(false)}>Cancel</Button>
+            <Button onClick={() => { setRenameDialogOpen(false); setActiveItem(null); }}>Cancel</Button>
             <Button type="submit" variant="contained">Rename</Button>
           </DialogActions>
         </form>
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
+      <Dialog open={deleteDialogOpen} onClose={() => { setDeleteDialogOpen(false); setActiveItem(null); }}>
         <DialogTitle>Confirm Delete</DialogTitle>
         <DialogContent>
           <Typography variant="body1">
@@ -1049,13 +1062,13 @@ const FolderExplorer = () => {
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+          <Button onClick={() => { setDeleteDialogOpen(false); setActiveItem(null); }}>Cancel</Button>
           <Button onClick={handleDeleteSubmit} color="error" variant="contained">Delete</Button>
         </DialogActions>
       </Dialog>
 
       {/* Folder Share Settings (Access settings) */}
-      <Dialog open={accessDialogOpen} onClose={() => setAccessDialogOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={accessDialogOpen} onClose={() => { setAccessDialogOpen(false); setActiveItem(null); }} maxWidth="sm" fullWidth>
         <DialogTitle>Share Settings: {activeItem?.data?.name}</DialogTitle>
         <DialogContent dividers>
           {/* Grant Form */}
@@ -1135,6 +1148,7 @@ const FolderExplorer = () => {
                   <TableCell>User</TableCell>
                   <TableCell>Email</TableCell>
                   <TableCell align="right">Access</TableCell>
+                  <TableCell align="right">Action</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -1149,6 +1163,16 @@ const FolderExplorer = () => {
                         size="small" 
                       />
                     </TableCell>
+                    <TableCell align="right">
+                      <IconButton 
+                        size="small" 
+                        color="error" 
+                        onClick={() => handleRevokeAccess(rule.user.id)}
+                        title="Revoke access rule"
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -1160,7 +1184,7 @@ const FolderExplorer = () => {
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setAccessDialogOpen(false)}>Done</Button>
+          <Button onClick={() => { setAccessDialogOpen(false); setActiveItem(null); }}>Done</Button>
         </DialogActions>
       </Dialog>
 

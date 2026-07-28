@@ -79,7 +79,7 @@ function App() {
             <Route
               path="/departments"
               element={
-                <ProtectedRoute requiredPermission="view_dashboard">
+                <ProtectedRoute requiredPermission="view_dashboard" blockUserRole={true}>
                   <Layout><Departments /></Layout>
                 </ProtectedRoute>
               }
@@ -127,7 +127,7 @@ function App() {
             <Route
               path="/settings"
               element={
-                <ProtectedRoute requiredPermission="view_dashboard">
+                <ProtectedRoute requiredPermission="view_dashboard" blockUserRole={true}>
                   <Layout><Settings /></Layout>
                 </ProtectedRoute>
               }
@@ -145,7 +145,7 @@ function App() {
             <Route
               path="/users"
               element={
-                <ProtectedRoute requiredPermission="view_dashboard">
+                <ProtectedRoute requiredPermission="manage_users" blockUserRole={true}>
                   <Layout><UserManagement /></Layout>
                 </ProtectedRoute>
               }
