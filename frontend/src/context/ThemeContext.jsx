@@ -1,35 +1,68 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 
-const ThemeModeContext = createContext({ toggleTheme: () => {}, mode: 'light' });
+const ThemeModeContext = createContext({ toggleTheme: () => {}, mode: 'light', applyAppearance: () => {} });
 export const useThemeMode = () => useContext(ThemeModeContext);
 
+// Helper: read localStorage or fallback
+const getLS = (key, fallback) => {
+  try { return localStorage.getItem(key) || fallback; } catch { return fallback; }
+};
+
 export const ThemeModeProvider = ({ children }) => {
-  const [mode, setMode] = useState(() => localStorage.getItem('theme_mode') || 'light');
+  const [mode, setMode] = useState(() => getLS('theme_mode', 'light'));
+  const [primaryColor, setPrimaryColor] = useState(() => getLS('app_primary_color', '#4F46E5'));
+  const [secondaryColor, setSecondaryColor] = useState(() => getLS('app_secondary_color', '#7C3AED'));
+  const [fontFamily, setFontFamily] = useState(() => getLS('app_font_family', "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif"));
+  const [borderRadius, setBorderRadius] = useState(() => parseInt(getLS('app_border_radius', '14')));
 
   useEffect(() => { localStorage.setItem('theme_mode', mode); }, [mode]);
-  const toggleTheme = () => setMode((p) => (p === 'light' ? 'dark' : 'light'));
+  const toggleTheme = () => setMode(p => p === 'light' ? 'dark' : 'light');
+
+  // Called from Settings page to apply new appearance
+  const applyAppearance = useCallback(({ primary, secondary, font, radius }) => {
+    if (primary) { setPrimaryColor(primary); localStorage.setItem('app_primary_color', primary); }
+    if (secondary) { setSecondaryColor(secondary); localStorage.setItem('app_secondary_color', secondary); }
+    if (font) { setFontFamily(font); localStorage.setItem('app_font_family', font); }
+    if (radius !== undefined) { setBorderRadius(radius); localStorage.setItem('app_border_radius', String(radius)); }
+  }, []);
 
   const theme = useMemo(() => {
     const isDark = mode === 'dark';
+    const primary = primaryColor;
+    const secondary = secondaryColor;
+    const font = fontFamily;
+    const radius = borderRadius;
+
+    // Darken a hex color slightly for hover states
+    const darken = (hex, amount = 20) => {
+      let c = hex.replace('#', '');
+      if (c.length === 3) c = c.split('').map(x => x + x).join('');
+      const num = parseInt(c, 16);
+      const r = Math.max(0, (num >> 16) - amount);
+      const g = Math.max(0, ((num >> 8) & 0xff) - amount);
+      const b = Math.max(0, (num & 0xff) - amount);
+      return `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`;
+    };
+
     return createTheme({
       palette: {
         mode,
         primary: {
-          main: '#4F46E5',           // deep indigo
-          dark: '#3730A3',
-          light: '#7C3AED',          // electric violet
+          main: primary,
+          dark: darken(primary, 30),
+          light: secondary,
           contrastText: '#ffffff',
         },
         secondary: {
-          main: '#7C3AED',
+          main: secondary,
           contrastText: '#ffffff',
         },
         success:  { main: '#10B981', light: '#D1FAE5', dark: '#059669' },
         warning:  { main: '#F59E0B', light: '#FEF3C7', dark: '#D97706' },
         error:    { main: '#F43F5E', light: '#FFE4E6', dark: '#BE123C' },
-        info:     { main: '#F97316', light: '#FFEDD5', dark: '#C2410C' }, // "expiring" orange
+        info:     { main: '#F97316', light: '#FFEDD5', dark: '#C2410C' },
         background: {
           default: isDark ? '#0F1117' : '#FAFAFA',
           paper:   isDark ? '#1A1D27' : '#FFFFFF',
@@ -40,19 +73,18 @@ export const ThemeModeProvider = ({ children }) => {
           disabled:  isDark ? '#475569' : '#CBD5E1',
         },
         divider: isDark ? '#2D3148' : '#E8ECF0',
-        // Custom semantic tokens surfaced via palette
         mou: {
           draft:    '#94A3B8',
           active:   '#10B981',
           pending:  '#F59E0B',
           expiring: '#F97316',
           expired:  '#F43F5E',
-          renewed:  '#4F46E5',
+          renewed:  primary,
         },
       },
 
       typography: {
-        fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif",
+        fontFamily: font,
         h1: { fontWeight: 800, letterSpacing: '-0.03em' },
         h2: { fontWeight: 800, letterSpacing: '-0.025em' },
         h3: { fontWeight: 700, letterSpacing: '-0.02em' },
@@ -61,13 +93,13 @@ export const ThemeModeProvider = ({ children }) => {
         h6: { fontWeight: 700, letterSpacing: '-0.005em' },
         subtitle1: { fontWeight: 600 },
         subtitle2: { fontWeight: 600 },
-        body1:  { fontFamily: "'Inter', system-ui, sans-serif", lineHeight: 1.7 },
-        body2:  { fontFamily: "'Inter', system-ui, sans-serif", lineHeight: 1.6 },
-        caption:{ fontFamily: "'Inter', system-ui, sans-serif" },
+        body1:  { fontFamily: font, lineHeight: 1.7 },
+        body2:  { fontFamily: font, lineHeight: 1.6 },
+        caption:{ fontFamily: font },
         button: { textTransform: 'none', fontWeight: 700, letterSpacing: '0.01em' },
       },
 
-      shape: { borderRadius: 14 },
+      shape: { borderRadius: radius },
 
       shadows: [
         'none',
@@ -87,9 +119,9 @@ export const ThemeModeProvider = ({ children }) => {
         MuiCssBaseline: {
           styleOverrides: {
             '*': { boxSizing: 'border-box' },
-            '::selection': { background: '#4F46E520' },
+            '::selection': { background: `${primary}20` },
             ':focus-visible': {
-              outline: '2px solid #4F46E5',
+              outline: `2px solid ${primary}`,
               outlineOffset: '3px',
             },
           },
@@ -98,7 +130,7 @@ export const ThemeModeProvider = ({ children }) => {
         MuiButton: {
           styleOverrides: {
             root: {
-              borderRadius: '12px',
+              borderRadius: `${Math.max(radius - 2, 6)}px`,
               padding: '8px 20px',
               transition: 'all 0.18s cubic-bezier(0.22,1,0.36,1)',
               boxShadow: 'none',
@@ -106,9 +138,9 @@ export const ThemeModeProvider = ({ children }) => {
               '&:hover': { boxShadow: 'none', transform: 'translateY(-1px)' },
             },
             contained: {
-              background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)',
+              background: `linear-gradient(135deg, ${primary} 0%, ${secondary} 100%)`,
               '&:hover': {
-                background: 'linear-gradient(135deg, #4338CA 0%, #6D28D9 100%)',
+                background: `linear-gradient(135deg, ${darken(primary, 20)} 0%, ${darken(secondary, 20)} 100%)`,
               },
             },
             containedError: { background: '#F43F5E', '&:hover': { background: '#BE123C' } },
@@ -120,7 +152,7 @@ export const ThemeModeProvider = ({ children }) => {
           styleOverrides: {
             root: {
               backgroundImage: 'none',
-              borderRadius: '16px',
+              borderRadius: `${radius}px`,
               border: `1px solid ${isDark ? '#2D3148' : '#E8ECF0'}`,
               boxShadow: isDark
                 ? '0 4px 20px rgba(0,0,0,0.2)'
@@ -153,7 +185,7 @@ export const ThemeModeProvider = ({ children }) => {
 
         MuiChip: {
           styleOverrides: {
-            root: { fontWeight: 700, borderRadius: '8px', fontSize: '0.72rem' },
+            root: { fontWeight: 700, borderRadius: `${Math.max(radius - 6, 4)}px`, fontSize: '0.72rem' },
           },
         },
 
@@ -161,10 +193,10 @@ export const ThemeModeProvider = ({ children }) => {
           styleOverrides: {
             root: {
               '& .MuiOutlinedInput-root': {
-                borderRadius: '12px',
+                borderRadius: `${Math.max(radius - 2, 6)}px`,
                 transition: 'box-shadow 0.18s ease',
                 '&.Mui-focused': {
-                  boxShadow: '0 0 0 3px rgba(79,70,229,0.15)',
+                  boxShadow: `0 0 0 3px ${primary}25`,
                 },
               },
             },
@@ -174,7 +206,7 @@ export const ThemeModeProvider = ({ children }) => {
         MuiDialog: {
           styleOverrides: {
             paper: {
-              borderRadius: '20px',
+              borderRadius: `${Math.min(radius + 6, 28)}px`,
               border: `1px solid ${isDark ? '#2D3148' : '#E8ECF0'}`,
               backgroundImage: 'none',
             },
@@ -184,9 +216,9 @@ export const ThemeModeProvider = ({ children }) => {
         MuiTooltip: {
           styleOverrides: {
             tooltip: {
-              borderRadius: '8px',
+              borderRadius: `${Math.max(radius - 6, 4)}px`,
               fontSize: '0.75rem',
-              fontFamily: "'Inter', system-ui, sans-serif",
+              fontFamily: font,
               background: isDark ? '#1E2235' : '#0F172A',
               padding: '6px 10px',
             },
@@ -198,7 +230,7 @@ export const ThemeModeProvider = ({ children }) => {
             root: {
               '& .MuiTableCell-root': {
                 background: isDark ? '#14172200' : '#F8FAFC00',
-                fontFamily: "'Inter', system-ui, sans-serif",
+                fontFamily: font,
                 fontWeight: 700,
                 fontSize: '0.72rem',
                 textTransform: 'uppercase',
@@ -229,16 +261,32 @@ export const ThemeModeProvider = ({ children }) => {
         MuiListItemButton: {
           styleOverrides: {
             root: {
-              borderRadius: '12px',
+              borderRadius: `${Math.max(radius - 2, 6)}px`,
               transition: 'all 0.18s cubic-bezier(0.22,1,0.36,1)',
+            },
+          },
+        },
+
+        MuiTab: {
+          styleOverrides: {
+            root: {
+              fontFamily: font,
             },
           },
         },
       },
     });
-  }, [mode]);
+  }, [mode, primaryColor, secondaryColor, fontFamily, borderRadius]);
 
-  const value = useMemo(() => ({ toggleTheme, mode }), [mode]);
+  const value = useMemo(() => ({
+    toggleTheme,
+    mode,
+    primaryColor,
+    secondaryColor,
+    fontFamily,
+    borderRadius,
+    applyAppearance
+  }), [mode, primaryColor, secondaryColor, fontFamily, borderRadius, applyAppearance]);
 
   return (
     <ThemeModeContext.Provider value={value}>

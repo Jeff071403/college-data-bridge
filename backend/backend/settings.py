@@ -3,6 +3,7 @@ import os
 from datetime import timedelta
 import psycopg2
 import environ
+<<<<<<< HEAD
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -17,6 +18,58 @@ SECRET_KEY = env('SECRET_KEY', default='django-insecure-+=t3a@n8j5g#$-rdym+*70zi
 DEBUG = env.bool('DEBUG', default=True)
 
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['*'])
+=======
+from django.core.exceptions import ImproperlyConfigured
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Initialize environment variables reader
+env = environ.Env(
+    DEBUG=(bool, False),
+    ALLOWED_HOSTS=(list, ['*'])
+)
+
+# Read environment variables
+environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
+
+# Verify required configuration variables
+required_vars = [
+    'SECRET_KEY',
+    'GOOGLE_SERVICE_ACCOUNT_FILE',
+    'GOOGLE_DRIVE_ROOT_FOLDER_ID',
+    'DB_NAME',
+    'DB_USER',
+    'DB_PASSWORD',
+]
+for var in required_vars:
+    if not env(var, default=None):
+        raise ImproperlyConfigured(f"Missing required environment variable: {var}")
+
+SECRET_KEY = env('SECRET_KEY')
+DEBUG = env.bool('DEBUG', default=True)
+ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['*'])
+
+# Google Drive API Configuration
+GOOGLE_DRIVE_TYPE = env('GOOGLE_DRIVE_TYPE', default='service_account')
+GOOGLE_DRIVE_PROJECT_ID = env('GOOGLE_DRIVE_PROJECT_ID', default='')
+GOOGLE_DRIVE_PRIVATE_KEY_ID = env('GOOGLE_DRIVE_PRIVATE_KEY_ID', default='')
+GOOGLE_DRIVE_PRIVATE_KEY = env('GOOGLE_DRIVE_PRIVATE_KEY', default='')
+GOOGLE_DRIVE_CLIENT_EMAIL = env('GOOGLE_DRIVE_CLIENT_EMAIL', default='')
+GOOGLE_DRIVE_CLIENT_ID = env('GOOGLE_DRIVE_CLIENT_ID', default='')
+GOOGLE_DRIVE_AUTH_URI = env('GOOGLE_DRIVE_AUTH_URI', default='https://accounts.google.com/o/oauth2/auth')
+GOOGLE_DRIVE_TOKEN_URI = env('GOOGLE_DRIVE_TOKEN_URI', default='https://oauth2.googleapis.com/token')
+GOOGLE_DRIVE_AUTH_PROVIDER_CERT_URL = env('GOOGLE_DRIVE_AUTH_PROVIDER_CERT_URL', default='https://www.googleapis.com/oauth2/v1/certs')
+GOOGLE_DRIVE_CLIENT_CERT_URL = env('GOOGLE_DRIVE_CLIENT_CERT_URL', default='')
+GOOGLE_DRIVE_UNIVERSE_DOMAIN = env('GOOGLE_DRIVE_UNIVERSE_DOMAIN', default='googleapis.com')
+GOOGLE_SERVICE_ACCOUNT_FILE = os.path.join(BASE_DIR, env('GOOGLE_SERVICE_ACCOUNT_FILE', default='credentials/google-drive.json'))
+GOOGLE_DRIVE_ROOT_FOLDER_ID = env('GOOGLE_DRIVE_ROOT_FOLDER_ID', default='')
+
+# Upload & File Constraints
+MAX_UPLOAD_SIZE = env.int('MAX_UPLOAD_SIZE', default=52428800)
+ALLOWED_FILE_TYPES = env.list('ALLOWED_FILE_TYPES', default=['pdf', 'doc', 'docx', 'xls', 'xlsx', 'png', 'jpg', 'jpeg'])
+
+# Logging configuration
+LOG_LEVEL = env('LOG_LEVEL', default='INFO')
 
 # Application definition
 INSTALLED_APPS = [
@@ -46,6 +99,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'backend.middleware.CustomTimeMiddleware',
     'corsheaders.middleware.CorsMiddleware', # CORS Headers Middleware
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -73,12 +127,21 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'backend.wsgi.application'
 
+<<<<<<< HEAD
 # Database Configuration (PostgreSQL with SQLite fallback)
 DB_NAME = env('DB_NAME', default='mou_dashboard')
 DB_USER = env('DB_USER', default='postgres')
 DB_PASSWORD = env('DB_PASSWORD', default='password')
 DB_HOST = env('DB_HOST', default='localhost')
 DB_PORT = env('DB_PORT', default='5432')
+=======
+DB_NAME = env('DB_NAME')
+DB_USER = env('DB_USER')
+DB_PASSWORD = env('DB_PASSWORD')
+DB_HOST = env('DB_HOST', default='localhost')
+DB_PORT = env('DB_PORT', default='5432')
+
+>>>>>>> 9a2f085 (feat: consolidate master data into settings, fix folder/file CRUD, enforce Google Drive primary storage, update user permissions, and streamline user management UI)
 
 DATABASES = {}
 

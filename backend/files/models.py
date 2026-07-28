@@ -29,8 +29,14 @@ class File(models.Model):
         blank=True,
         related_name='uploaded_files'
     )
-    file_field = models.FileField(upload_to=file_upload_path)
+    file_field = models.FileField(upload_to=file_upload_path, null=True, blank=True)
     version_number = models.IntegerField(default=1)
+    
+    google_file_id = models.CharField(max_length=255, blank=True, null=True)
+    mime_type = models.CharField(max_length=255, blank=True, null=True)
+    file_size = models.BigIntegerField(blank=True, null=True)
+    web_view_link = models.URLField(max_length=1000, blank=True, null=True)
+    web_content_link = models.URLField(max_length=1000, blank=True, null=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -49,7 +55,8 @@ class FileVersion(models.Model):
     size = models.BigIntegerField()
     file_type = models.CharField(max_length=100)
     
-    file_field = models.FileField(upload_to=file_version_upload_path)
+    file_field = models.FileField(upload_to=file_version_upload_path, null=True, blank=True)
+    google_file_id = models.CharField(max_length=255, blank=True, null=True)
     uploaded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

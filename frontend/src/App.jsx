@@ -13,22 +13,26 @@ import UserManagement from './pages/UserManagement';
 import ActivityLog from './pages/ActivityLog';
 import Profile from './pages/Profile';
 import SystemMap from './pages/SystemMap';
-import MOURepository from './pages/MOURepository';
 import MOUDetail from './pages/MOUDetail';
 import MOUCreate from './pages/MOUCreate';
 import Reports from './pages/Reports';
 import Templates from './pages/Templates';
+import TemplateDetail from './pages/TemplateDetail';
+import MasterData from './pages/MasterData';
 import SharedWithMe from './pages/SharedWithMe';
 import Departments from './pages/Departments';
 import NotificationsPage from './pages/NotificationsPage';
 import Settings from './pages/Settings';
 
+import { SiteTimeProvider } from './context/SiteTimeContext';
+
 function App() {
   return (
     <Router>
       <ThemeModeProvider>
-        <AuthProvider>
-          <Routes>
+        <SiteTimeProvider>
+          <AuthProvider>
+            <Routes>
             {/* Public Login Page */}
             <Route path="/login" element={<Login />} />
 
@@ -42,14 +46,6 @@ function App() {
               }
             />
 
-            <Route
-              path="/mou-repository"
-              element={
-                <ProtectedRoute requiredPermission="view_dashboard">
-                  <Layout><MOURepository /></Layout>
-                </ProtectedRoute>
-              }
-            />
 
             <Route
               path="/mou/create"
@@ -106,6 +102,18 @@ function App() {
             />
 
             <Route
+              path="/template-detail/:id"
+              element={
+                <ProtectedRoute requiredPermission="manage_users">
+                  <Layout><TemplateDetail /></Layout>
+                </ProtectedRoute>
+              }
+            />
+
+            {/* /master-data is now merged into System Settings → redirect old links */}
+            <Route path="/master-data" element={<Navigate to="/settings" replace />} />
+
+            <Route
               path="/notifications"
               element={
                 <ProtectedRoute requiredPermission="view_notifications">
@@ -135,7 +143,7 @@ function App() {
             <Route
               path="/users"
               element={
-                <ProtectedRoute requiredPermission="manage_users">
+                <ProtectedRoute requiredPermission="view_dashboard">
                   <Layout><UserManagement /></Layout>
                 </ProtectedRoute>
               }
@@ -172,9 +180,10 @@ function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </AuthProvider>
-      </ThemeModeProvider>
-    </Router>
-  );
+      </SiteTimeProvider>
+    </ThemeModeProvider>
+  </Router>
+);
 }
 
 export default App;

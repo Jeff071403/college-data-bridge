@@ -14,6 +14,89 @@ User = get_user_model()
 def seed_data():
     print("Starting data seeding...")
 
+    # Seeding Master Data Tables
+    from mous.models import (
+        TemplateCategory, OrganizationType, CollaborationType, DocumentType, Tag,
+        DepartmentCategory, Department
+    )
+
+    # 1. Seed Template Categories
+    template_categories = [
+        "Industry", "Research", "Academic", "International", "Placement", 
+        "Internship", "Government", "NGO", "Consultancy", "Exchange Programme", 
+        "MoA", "MoU"
+    ]
+    for name in template_categories:
+        TemplateCategory.objects.get_or_create(name=name)
+
+    # 2. Seed Organization Types
+    org_types = [
+        "IT Company", "University", "Government", "Private Company", "NGO", 
+        "Research Institute", "Startup", "Industry", "Hospital", "School", "College"
+    ]
+    for name in org_types:
+        OrganizationType.objects.get_or_create(name=name)
+
+    # 3. Seed Collaboration Types
+    collab_types = [
+        "Internship", "Placement", "Research", "Training", "Faculty Exchange", 
+        "Student Exchange", "Sponsored Project", "Consultancy", "Skill Development", 
+        "Joint Research", "Industrial Visit", "Laboratory Sharing", "Other"
+    ]
+    for name in collab_types:
+        CollaborationType.objects.get_or_create(name=name)
+
+    # 4. Seed Document Types
+    doc_types = [
+        "Main MOU", "Annexure", "Addendum", "Renewal", "Legal Copy", "Draft", "Final Copy"
+    ]
+    for name in doc_types:
+        DocumentType.objects.get_or_create(name=name)
+
+    # 5. Seed Tags
+    tags_list = ["Urgent", "Draft", "Approved", "Standard", "International"]
+    for name in tags_list:
+        Tag.objects.get_or_create(name=name)
+
+    # 6. Seed Department Categories and Departments
+    dept_categories = {
+        "Aided": [
+            "English", "Tamil", "Languages", "History", "Political Science", 
+            "Public Administration", "Economics", "Philosophy", "Commerce", 
+            "Social Work", "Mathematics", "Statistics", "Physics", "Chemistry", 
+            "Botany", "Zoology", "Physical Education"
+        ],
+        "Self-Financed (SFS)": [
+            "English", "Tamil", "Languages", "Journalism", "Social Work", 
+            "Commerce", "Business Administration (BBA)", "Communication", 
+            "Geography", "Tourism Studies", "Mathematics", "Physics", "Chemistry", 
+            "Microbiology", "Computer Application (BCA)", "Computer Science", 
+            "Master of Computer Applications (MCA)", "Visual Communication", 
+            "Psychology", "Data Science"
+        ],
+        "Other / Administrative Units": [
+            "Principal Office", "Administration Office", "Controller of Examinations", 
+            "IQAC", "Library", "Placement Cell", "Research Centre", 
+            "Institute for Advanced Christian Studies", 
+            "Institute for Administrative Service Coaching", 
+            "Centre for Women's Studies", "Centre for Peace Studies", 
+            "Entrepreneurship Development Cell", "Institution Innovation Council (IIC)", 
+            "Self-Financed Stream Office"
+        ]
+    }
+
+    for cat_name, depts in dept_categories.items():
+        cat, _ = DepartmentCategory.objects.get_or_create(name=cat_name)
+        for dname in depts:
+            # We save aided/sfs with suffix, administrative units plain
+            if cat_name == "Aided":
+                full_name = f"{dname} (Aided)"
+            elif cat_name == "Self-Financed (SFS)":
+                full_name = f"{dname} (SFS)"
+            else:
+                full_name = dname
+            Department.objects.get_or_create(name=full_name, category=cat)
+
     # 1. Define Permissions
     permissions_list = [
         # Folders
@@ -86,9 +169,9 @@ def seed_data():
 
     # 4. Create default users for testing
     users_data = [
-        ("superadmin@college.edu", "Super Admin", "superadmin@college.edu", "AdminPass123!", "Super Admin", "Super Admin", "MOU Dept"),
-        ("admin@college.edu", "System Admin", "admin@college.edu", "AdminPass123!", "Admin", "MOU Administrator", "MOU Dept"),
-        ("user@college.edu", "John Doe", "user@college.edu", "UserPass123!", "User", "MOU Analyst", "MOU Dept"),
+        ("superadmin@college.edu", "Super Admin", "superadmin@college.edu", "AdminPass123!", "Super Admin", "Super Admin", "Principal Office"),
+        ("admin@college.edu", "System Admin", "admin@college.edu", "AdminPass123!", "Admin", "MOU Administrator", "Principal Office"),
+        ("user@college.edu", "John Doe", "user@college.edu", "UserPass123!", "User", "MOU Analyst", "Principal Office"),
     ]
 
     for email, name, username, password, role_name, designation, department in users_data:
@@ -150,10 +233,10 @@ def seed_data():
 
     # Sample MOUs
     sample_mous = [
-        ("MOU-2026-0001", "ABC Technologies Internship Agreement", "Internship", "ABC Tech Corp", "Engineering", "Active", 12, date(2026, 1, 15)),
-        ("MOU-2026-0002", "IIT Bombay Joint Research Initiative", "Research", "IIT Bombay", "Medical", "Active", 24, date(2025, 8, 10)),
-        ("MOU-2026-0003", "Infosys Placement & Recruitment Drive", "Placement", "Infosys Ltd", "Engineering", "Pending Verification", 12, date(2026, 7, 1)),
-        ("MOU-2026-0004", "TATA Motors Industrial Training", "Industry Collaboration", "TATA Motors", "Commerce", "Expiring Soon", 6, date(2026, 2, 1)),
+        ("MOU-2026-0001", "ABC Technologies Internship Agreement", "Internship", "ABC Tech Corp", "Computer Science (SFS)", "Active", 12, date(2026, 1, 15)),
+        ("MOU-2026-0002", "IIT Bombay Joint Research Initiative", "Research", "IIT Bombay", "Physics (Aided)", "Active", 24, date(2025, 8, 10)),
+        ("MOU-2026-0003", "Infosys Placement & Recruitment Drive", "Placement", "Infosys Ltd", "Computer Science (SFS)", "Pending Verification", 12, date(2026, 7, 1)),
+        ("MOU-2026-0004", "TATA Motors Industrial Training", "Industry Collaboration", "TATA Motors", "Commerce (Aided)", "Expiring Soon", 6, date(2026, 2, 1)),
     ]
 
     admin_user = User.objects.filter(email="admin@college.edu").first()

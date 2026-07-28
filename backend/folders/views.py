@@ -6,9 +6,14 @@ from django.contrib.auth import get_user_model
 from permissions.custom_permissions import HasDynamicPermission
 from activity_logs.utils import log_activity
 from notifications.utils import create_notification, notify_admins
-from .models import Folder, FolderPermission
+from .models import Folder, FolderPermission, get_mou_share_permission
 from .serializers import FolderSerializer, FolderPermissionSerializer
 from files.serializers import FileSerializer # For listing files in folder
+from django.db import transaction
+from services import drive_service
+import logging
+
+logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
@@ -62,32 +67,48 @@ class FolderViewSet(viewsets.ModelViewSet):
                     {"detail": "You do not have access to this parent folder."},
                     status=status.HTTP_403_FORBIDDEN
                 )
+            
+            # Share permission restriction
+            is_admin = request.user.role and request.user.role.name in ["Super Admin", "Admin"]
+            if not is_admin and parent_folder.created_by != request.user:
+                share_perm = get_mou_share_permission(request.user, parent_folder)
+                if share_perm in ['View Only', 'Upload Only']:
+                    return Response(
+                        {"detail": "You only have read/upload access and cannot create subfolders here."},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
 
-        # Check permission manually since view-level check handles base permissions
-        from permissions.custom_permissions import get_user_permissions
-        active_perms = get_user_permissions(request.user)
-        
-        # Super Admin doesn't need checks
-        is_super_admin = request.user.role and request.user.role.name == "Super Admin"
-        if not is_super_admin and required_perm not in active_perms:
-            return Response(
-                {"detail": f"You do not have permission to perform action: {required_perm}"},
-                status=status.HTTP_403_FORBIDDEN
-            )
+        try:
+            with transaction.atomic():
+                serializer = self.get_serializer(data=request.data)
+                serializer.is_valid(raise_exception=True)
+                folder = serializer.save(created_by=request.user)
 
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        folder = serializer.save(created_by=request.user)
+                # Get parent Google folder ID
+                parent_google_id = None
+                if parent_folder:
+                    parent_google_id = parent_folder.google_folder_id
 
-        # Audit & Notify
-        log_activity(request.user, f"Created folder '{folder.name}'", "folders", request)
-        
-        # Notify other admins
-        notify_admins("Folder Created", f"Folder '{folder.name}' was created by {request.user.name}.", metadata={'action': 'folder_created', 'folder_id': folder.id, 'folder_name': folder.name})
-        
-        # If there's a parent, notify any user who has explicit permissions on the parent folder
-        # or ancestors, so they are kept in sync
-        
+                # Create folder on Google Drive (Strict: Google Drive is required)
+                google_folder_id = drive_service.create_folder(folder.name, parent_google_id)
+                folder.google_folder_id = google_folder_id
+                folder.save(update_fields=['google_folder_id'])
+
+                # Support custom creation date/time
+                custom_created_at = request.data.get('created_at')
+                if custom_created_at:
+                    from django.utils.dateparse import parse_datetime
+                    parsed_dt = parse_datetime(custom_created_at)
+                    if parsed_dt:
+                        Folder.objects.filter(pk=folder.pk).update(created_at=parsed_dt)
+                        folder.refresh_from_db()
+
+                # Audit & Notify
+                log_activity(request.user, f"Created folder '{folder.name}'", "folders", request)
+                notify_admins("Folder Created", f"Folder '{folder.name}' was created by {request.user.name}.", metadata={'action': 'folder_created', 'folder_id': folder.id, 'folder_name': folder.name})
+        except Exception as e:
+            return Response({"detail": f"Google Drive folder creation failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
         headers = self.get_success_headers(serializer.data)
         return Response(FolderSerializer(folder).data, status=status.HTTP_201_CREATED, headers=headers)
 
@@ -95,40 +116,183 @@ class FolderViewSet(viewsets.ModelViewSet):
         folder = self.get_object()
         old_name = folder.name
         
-        # Standard edit check
+        # Access check: user created the folder or has folder access
         if not folder.has_access(request.user):
             return Response(
-                {"detail": "You do not have access to this folder."},
+                {"detail": "You do not have access to edit this folder."},
                 status=status.HTTP_403_FORBIDDEN
             )
             
-        serializer = self.get_serializer(folder, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        updated_folder = serializer.save()
-        
-        # Log & Notify
-        log_activity(request.user, f"Renamed folder from '{old_name}' to '{updated_folder.name}'", "folders", request)
-        notify_admins("Folder Renamed", f"Folder '{old_name}' was renamed to '{updated_folder.name}' by {request.user.name}.", metadata={'action': 'folder_renamed', 'folder_id': updated_folder.id, 'folder_name': updated_folder.name})
+        # Share permission restriction (unless user created the folder)
+        is_admin = request.user.role and request.user.role.name in ["Super Admin", "Admin"]
+        if not is_admin and folder.created_by != request.user:
+            share_perm = get_mou_share_permission(request.user, folder)
+            if share_perm in ['View Only', 'Upload Only']:
+                return Response(
+                    {"detail": "You only have read/upload access and cannot edit folders here."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+        try:
+            with transaction.atomic():
+                serializer = self.get_serializer(folder, data=request.data, partial=True)
+                serializer.is_valid(raise_exception=True)
+                updated_folder = serializer.save()
+                
+                # Sync rename to Google Drive
+                if updated_folder.google_folder_id and old_name != updated_folder.name:
+                    drive_service.rename_file(updated_folder.google_folder_id, updated_folder.name)
+
+                # Log & Notify
+                log_activity(request.user, f"Renamed folder from '{old_name}' to '{updated_folder.name}'", "folders", request)
+                notify_admins("Folder Renamed", f"Folder '{old_name}' was renamed to '{updated_folder.name}' by {request.user.name}.", metadata={'action': 'folder_renamed', 'folder_id': updated_folder.id, 'folder_name': updated_folder.name})
+        except Exception as e:
+            return Response({"detail": f"Google Drive folder rename failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
         return Response(FolderSerializer(updated_folder).data)
 
     def destroy(self, request, *args, **kwargs):
         folder = self.get_object()
         
-        # Access check
+        # Access check: user created the folder or has access
         if not folder.has_access(request.user):
             return Response(
-                {"detail": "You do not have access to this folder."},
+                {"detail": "You do not have access to delete this folder."},
                 status=status.HTTP_403_FORBIDDEN
             )
             
+        # Share permission restriction (unless user created the folder)
+        is_admin = request.user.role and request.user.role.name in ["Super Admin", "Admin"]
+        if not is_admin and folder.created_by != request.user:
+            share_perm = get_mou_share_permission(request.user, folder)
+            if share_perm in ['View Only', 'Upload Only']:
+                return Response(
+                    {"detail": "You only have read/upload access and cannot delete folders here."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
         folder_name = folder.name
-        self.perform_destroy(folder)
+        google_folder_id = folder.google_folder_id
         
-        # Log & Notify
-        log_activity(request.user, f"Deleted folder '{folder_name}'", "folders", request)
-        notify_admins("Folder Deleted", f"Folder '{folder_name}' was deleted by {request.user.name}.", metadata={'action': 'folder_deleted', 'folder_name': folder_name})
+        try:
+            with transaction.atomic():
+                if google_folder_id:
+                    drive_service.delete_file(google_folder_id)
+                self.perform_destroy(folder)
+                    
+                # Log & Notify
+                log_activity(request.user, f"Deleted folder '{folder_name}'", "folders", request)
+                notify_admins("Folder Deleted", f"Folder '{folder_name}' was deleted by {request.user.name}.", metadata={'action': 'folder_deleted', 'folder_name': folder_name})
+        except Exception as e:
+            return Response({"detail": f"Google Drive folder deletion failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=['get'], url_path='drive-status', permission_classes=[permissions.IsAuthenticated])
+    def drive_status(self, request):
+        """Tests Google Drive connectivity and returns status."""
+        try:
+            svc = drive_service.authenticate()
+            # Try to get the root folder metadata as a live ping
+            from django.conf import settings
+            root_id = settings.GOOGLE_DRIVE_ROOT_FOLDER_ID
+            meta = svc.files().get(fileId=root_id, fields='id,name').execute()
+            return Response({
+                'connected': True,
+                'root_folder_id': root_id,
+                'root_folder_name': meta.get('name'),
+                'service_account': settings.GOOGLE_SERVICE_ACCOUNT_FILE,
+            })
+        except Exception as e:
+            return Response({
+                'connected': False,
+                'error': str(e),
+            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+    @action(detail=False, methods=['post'], url_path='create')
+    def create_custom(self, request):
+        """
+        Maps to POST /api/folders/create/
+        """
+        return self.create(request)
+
+    @action(detail=False, methods=['put'], url_path='rename')
+    def rename_custom(self, request):
+        """
+        Maps to PUT /api/folders/rename/
+        """
+        folder_id = request.data.get('folder_id')
+        new_name = request.data.get('name')
+        if not folder_id or not new_name:
+            return Response({"folder_id": ["This field is required."], "name": ["This field is required."]}, status=status.HTTP_400_BAD_REQUEST)
+        
+        folder = get_object_or_404(Folder, id=folder_id)
+        if not folder.has_access(request.user):
+            return Response({"detail": "You do not have access to this folder."}, status=status.HTTP_403_FORBIDDEN)
+            
+        # Share permission restriction
+        is_admin = request.user.role and request.user.role.name in ["Super Admin", "Admin"]
+        if not is_admin:
+            share_perm = get_mou_share_permission(request.user, folder)
+            if share_perm in ['View Only', 'Upload Only']:
+                return Response(
+                    {"detail": "You only have read/upload access and cannot edit folders here."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+        old_name = folder.name
+        try:
+            with transaction.atomic():
+                folder.name = new_name
+                folder.save(update_fields=['name', 'updated_at'])
+                
+                if folder.google_folder_id:
+                    drive_service.rename_file(folder.google_folder_id, new_name)
+                    
+                log_activity(request.user, f"Renamed folder from '{old_name}' to '{new_name}'", "folders", request)
+                notify_admins("Folder Renamed", f"Folder '{old_name}' was renamed to '{new_name}' by {request.user.name}.", metadata={'action': 'folder_renamed', 'folder_id': folder.id, 'folder_name': folder.name})
+        except Exception as e:
+            return Response({"detail": f"Rename sync with Google Drive failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response(FolderSerializer(folder).data)
+
+    @action(detail=False, methods=['delete'], url_path='delete')
+    def delete_custom(self, request):
+        """
+        Maps to DELETE /api/folders/delete/
+        """
+        folder_id = request.data.get('folder_id') or request.query_params.get('folder_id')
+        if not folder_id:
+            return Response({"folder_id": ["This field is required."]}, status=status.HTTP_400_BAD_REQUEST)
+        
+        folder = get_object_or_404(Folder, id=folder_id)
+        if not folder.has_access(request.user):
+            return Response({"detail": "You do not have access to this folder."}, status=status.HTTP_403_FORBIDDEN)
+            
+        # Share permission restriction
+        is_admin = request.user.role and request.user.role.name in ["Super Admin", "Admin"]
+        if not is_admin:
+            share_perm = get_mou_share_permission(request.user, folder)
+            if share_perm in ['View Only', 'Upload Only']:
+                return Response(
+                    {"detail": "You only have read/upload access and cannot delete folders here."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+        folder_name = folder.name
+        google_folder_id = folder.google_folder_id
+        
+        try:
+            with transaction.atomic():
+                if google_folder_id:
+                    drive_service.delete_file(google_folder_id)
+                folder.delete()
+                
+                log_activity(request.user, f"Deleted folder '{folder_name}'", "folders", request)
+                notify_admins("Folder Deleted", f"Folder '{folder_name}' was deleted by {request.user.name}.", metadata={'action': 'folder_deleted', 'folder_name': folder_name})
+        except Exception as e:
+            return Response({"detail": f"Deletion sync with Google Drive failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=['get'])

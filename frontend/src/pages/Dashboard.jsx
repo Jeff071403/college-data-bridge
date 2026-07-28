@@ -161,59 +161,47 @@ const Dashboard = () => {
   };
 
   return (
-    <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1440, mx: 'auto' }} className="animate-fade-slide-up">
+    <Box sx={{ flexGrow: 1 }} className="animate-fade-slide-up">
 
       {/* ── Top Header Hero Banner ── */}
-      <Box 
-        sx={{ 
-          p: { xs: 2.5, md: 3.5 }, 
-          mb: 4, 
-          borderRadius: '24px', 
-          background: 'linear-gradient(135deg, rgba(79, 70, 229, 0.95) 0%, rgba(124, 58, 237, 0.9) 100%)',
+      <Box
+        sx={{
+          px: { xs: 2.5, md: 3.5 },
+          py: { xs: 2, md: 2.5 },
+          mb: 3.5,
+          borderRadius: '20px',
+          background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)',
           color: '#fff',
-          boxShadow: '0 12px 32px -4px rgba(79, 70, 229, 0.4)',
+          boxShadow: '0 8px 28px -4px rgba(79,70,229,0.38)',
           position: 'relative',
-          overflow: 'hidden'
+          overflow: 'hidden',
         }}
       >
+        {/* decorative circles */}
+        <Box sx={{ position: 'absolute', top: -30, right: -30, width: 160, height: 160, borderRadius: '50%', bgcolor: 'rgba(255,255,255,0.06)', pointerEvents: 'none' }} />
+        <Box sx={{ position: 'absolute', bottom: -40, right: 100, width: 120, height: 120, borderRadius: '50%', bgcolor: 'rgba(255,255,255,0.04)', pointerEvents: 'none' }} />
         <Box sx={{ position: 'relative', zIndex: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
           <Box>
-            <Typography variant="h4" sx={{ fontWeight: 800, mb: 0.5, letterSpacing: '-0.02em' }}>
+            <Typography variant="h5" sx={{ fontWeight: 800, mb: 0.4, letterSpacing: '-0.01em' }}>
               Welcome back, {user?.name || 'Administrator'}! 👋
             </Typography>
-            <Typography variant="body2" sx={{ opacity: 0.9, maxWidth: 600, fontSize: '0.92rem' }}>
-              MOU Lifecycle & Executive Document Hub. Track agreements, monitor compliance, and review pending departmental sign-offs.
+            <Typography variant="body2" sx={{ opacity: 0.85, fontSize: '0.87rem' }}>
+              MOU Lifecycle &amp; Document Hub — track agreements, monitor compliance, manage sign-offs.
             </Typography>
           </Box>
-          <Box sx={{ display: 'flex', gap: 1.5 }}>
+          <Box sx={{ display: 'flex', gap: 1.2 }}>
             <Button
               variant="contained"
               onClick={() => navigate('/explorer')}
-              sx={{
-                bgcolor: '#ffffff',
-                color: '#4F46E5',
-                fontWeight: 700,
-                px: 2.5,
-                py: 1.2,
-                borderRadius: '14px',
-                '&:hover': { bgcolor: '#f8fafc', transform: 'translateY(-2px)' }
-              }}
+              sx={{ bgcolor: '#ffffff', color: '#4F46E5', fontWeight: 700, px: 2.5, py: 0.9, borderRadius: '12px', '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)' } }}
               startIcon={<CloudUploadIcon />}
             >
-              Upload Document
+              Upload Doc
             </Button>
             <Button
               variant="outlined"
               onClick={() => navigate('/system-map')}
-              sx={{
-                borderColor: 'rgba(255,255,255,0.4)',
-                color: '#ffffff',
-                fontWeight: 700,
-                px: 2.5,
-                py: 1.2,
-                borderRadius: '14px',
-                '&:hover': { borderColor: '#ffffff', bgcolor: 'rgba(255,255,255,0.1)' }
-              }}
+              sx={{ borderColor: 'rgba(255,255,255,0.45)', color: '#fff', fontWeight: 700, px: 2.5, py: 0.9, borderRadius: '12px', '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,0.1)' } }}
               startIcon={<InfoOutlinedIcon />}
             >
               Lifecycle Guide
@@ -222,44 +210,35 @@ const Dashboard = () => {
         </Box>
       </Box>
 
-      {/* ── Stat Highlights Bar (4 Distinct Colored Glowing Cards) ── */}
-      <Grid container spacing={2.5} sx={{ mb: 4 }}>
+      {/* ── Stat Highlights Bar ── */}
+      <Grid container spacing={2.5} sx={{ mb: 3.5 }}>
         {[
-          { title: 'Active MOUs', count: stats?.total_files || 42, label: 'Fully Verified & Active', color: '#10B981', glow: 'card-glow-active', icon: <CheckCircleIcon />, bg: 'rgba(16, 185, 129, 0.12)', border: 'border-accent-emerald' },
-          { title: 'Pending Approval', count: 7, label: 'Requires Admin Verification', color: '#F59E0B', glow: 'card-glow-pending', icon: <HourglassTopIcon />, bg: 'rgba(245, 158, 11, 0.12)', border: 'border-accent-amber' },
-          { title: 'Expiring Soon', count: 3, label: 'Expires within 30 Days', color: '#F97316', glow: 'card-glow-expiring', icon: <WarningIcon />, bg: 'rgba(249, 115, 22, 0.12)', border: 'border-accent-orange' },
-          { title: 'Total Repositories', count: stats?.total_folders || 18, label: 'Department Folders', color: '#4F46E5', glow: 'card-glow-primary', icon: <AssignmentIcon />, bg: 'rgba(79, 70, 229, 0.12)', border: 'border-accent-indigo' },
+          { title: 'Active MOUs',        count: stats?.total_files || 0,  label: 'Fully Verified & Active',     color: '#10B981', icon: <CheckCircleIcon />,        bg: 'rgba(16,185,129,0.1)',  grad: 'linear-gradient(90deg,#10B981,#059669)' },
+          { title: 'Pending Approval',   count: 7,                         label: 'Requires Admin Verification', color: '#F59E0B', icon: <HourglassTopIcon />,        bg: 'rgba(245,158,11,0.1)', grad: 'linear-gradient(90deg,#F59E0B,#D97706)' },
+          { title: 'Expiring in 30 Days',count: 3,                         label: 'Expires within 30 Days',      color: '#F97316', icon: <WarningIcon />,             bg: 'rgba(249,115,22,0.1)', grad: 'linear-gradient(90deg,#F97316,#EA580C)' },
+          { title: 'Repositories',       count: stats?.total_folders || 0, label: 'Department Folders',          color: '#4F46E5', icon: <AssignmentIcon />,          bg: 'rgba(79,70,229,0.1)',  grad: 'linear-gradient(90deg,#4F46E5,#7C3AED)' },
         ].map((item, idx) => (
           <Grid item xs={12} sm={6} md={3} key={item.title}>
-            <Card 
-              className={`animate-slide-up ${item.border} ${item.glow}`}
-              sx={{ 
-                p: 2.5, 
-                borderRadius: '20px', 
-                animationDelay: `${idx * 80}ms`,
-                position: 'relative',
-                overflow: 'hidden',
-                bgcolor: 'background.paper'
-              }}
-            >
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                <Box>
-                  <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: '0.72rem' }}>
-                    {item.title}
-                  </Typography>
-                  <Tooltip title="Hover to explain: Click to filter records by status">
-                    <Typography variant="h3" sx={{ fontWeight: 900, color: item.color, mt: 0.5, letterSpacing: '-0.02em' }}>
+            <Card sx={{
+              p: 0, borderRadius: '18px', overflow: 'hidden',
+              border: '1px solid', borderColor: 'divider', boxShadow: 'none',
+              transition: 'transform 0.22s ease, box-shadow 0.22s ease',
+              animationDelay: `${idx * 80}ms`,
+              '&:hover': { transform: 'translateY(-3px)', boxShadow: `0 10px 28px ${item.color}22` },
+            }}>
+              <Box sx={{ height: 4, background: item.grad }} />
+              <Box sx={{ p: 2.5 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <Box>
+                    <Typography sx={{ fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.7px', color: 'text.secondary', mb: 0.4 }}>{item.title}</Typography>
+                    <Typography sx={{ fontSize: '2.4rem', fontWeight: 900, lineHeight: 1, color: item.color }}>
                       <CountUp end={item.count} />
                     </Typography>
-                  </Tooltip>
+                  </Box>
+                  <Avatar sx={{ bgcolor: item.bg, color: item.color, width: 44, height: 44, borderRadius: '12px' }}>{item.icon}</Avatar>
                 </Box>
-                <Avatar sx={{ bgcolor: item.bg, color: item.color, width: 46, height: 46, borderRadius: '14px' }}>
-                  {item.icon}
-                </Avatar>
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 500, mt: 1.2, display: 'block' }}>{item.label}</Typography>
               </Box>
-              <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.75rem', fontWeight: 500 }}>
-                {item.label}
-              </Typography>
             </Card>
           </Grid>
         ))}
@@ -267,37 +246,38 @@ const Dashboard = () => {
 
       {/* ── Main Layout: Left Column & Right Widgets ── */}
       <Grid container spacing={3}>
-        
-        {/* ═══════════════ LEFT COLUMN (Charts, Folders, Table) ═══════════════ */}
-        <Grid item xs={12} lg={8.5}>
 
-          {/* ── Interactive Recharts Analytics ── */}
-          <Card sx={{ p: 3, mb: 3.5, borderRadius: '20px', border: '1px solid', borderColor: 'divider' }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }} className="section-header-gradient">
+        {/* ═══════════ LEFT COLUMN ═══════════ */}
+        <Grid item xs={12} lg={8}>
+
+          {/* ── Trend Chart ── */}
+          <Card sx={{ p: 3, mb: 3, borderRadius: '18px', border: '1px solid', borderColor: 'divider', boxShadow: 'none' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <TrendingUpIcon sx={{ color: 'primary.main' }} />
-                <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>MOU Execution & Growth Trend</Typography>
+                <Avatar sx={{ bgcolor: 'rgba(79,70,229,0.1)', color: 'primary.main', width: 34, height: 34, borderRadius: '10px' }}>
+                  <TrendingUpIcon fontSize="small" />
+                </Avatar>
+                <Typography sx={{ fontWeight: 800, fontSize: '0.98rem' }}>MOU Execution &amp; Growth Trend</Typography>
               </Box>
-              <Chip label="2026 Overview" size="small" sx={{ bgcolor: 'rgba(79,70,229,0.1)', color: 'primary.main', fontWeight: 700 }} />
+              <Chip label="2026 Overview" size="small" sx={{ bgcolor: 'rgba(79,70,229,0.08)', color: 'primary.main', fontWeight: 700 }} />
             </Box>
-            
-            <Box sx={{ width: '100%', height: 240 }}>
+            <Box sx={{ width: '100%', height: 220 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={trendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <AreaChart data={trendData} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorActive" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10B981" stopOpacity={0.4}/>
+                      <stop offset="5%" stopColor="#10B981" stopOpacity={0.35}/>
                       <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
                     </linearGradient>
                     <linearGradient id="colorPending" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.4}/>
+                      <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.35}/>
                       <stop offset="95%" stopColor="#F59E0B" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <XAxis dataKey="month" stroke="#94A3B8" fontSize={12} tickLine={false} />
-                  <YAxis stroke="#94A3B8" fontSize={12} tickLine={false} />
-                  <RechartsTooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }} />
-                  <Area type="monotone" dataKey="Active" stroke="#10B981" strokeWidth={3} fillOpacity={1} fill="url(#colorActive)" />
+                  <XAxis dataKey="month" stroke="#94A3B8" fontSize={11} tickLine={false} axisLine={false} />
+                  <YAxis stroke="#94A3B8" fontSize={11} tickLine={false} axisLine={false} />
+                  <RechartsTooltip contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 6px 20px rgba(0,0,0,0.12)', fontSize: '0.8rem' }} />
+                  <Area type="monotone" dataKey="Active" stroke="#10B981" strokeWidth={2.5} fillOpacity={1} fill="url(#colorActive)" />
                   <Area type="monotone" dataKey="Pending" stroke="#F59E0B" strokeWidth={2} fillOpacity={1} fill="url(#colorPending)" />
                 </AreaChart>
               </ResponsiveContainer>
@@ -361,7 +341,7 @@ const Dashboard = () => {
           <Box sx={{ mb: 3 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
               <Typography variant="h6" sx={{ fontWeight: 800, fontSize: '1rem' }}>Recent Organizational MOU Folders</Typography>
-              <Button size="small" endIcon={<ArrowForwardIcon />} onClick={() => navigate('/mou-repository')} sx={{ fontWeight: 700 }}>
+              <Button size="small" endIcon={<ArrowForwardIcon />} onClick={() => navigate('/explorer')} sx={{ fontWeight: 700 }}>
                 View Folder Directory
               </Button>
             </Box>
@@ -435,8 +415,8 @@ const Dashboard = () => {
           </Box>
         </Grid>
 
-        {/* ═══════════════ RIGHT COLUMN (Distribution & Storage) ═══════════════ */}
-        <Grid item xs={12} lg={3.5}>
+        {/* ═══════════ RIGHT COLUMN ═══════════ */}
+        <Grid item xs={12} lg={4}>
 
           {/* ── Category / Department Distribution Pie Chart ── */}
           <Card sx={{ p: 2.5, mb: 3, borderRadius: '20px', border: '1px solid', borderColor: 'divider' }}>

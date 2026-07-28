@@ -55,3 +55,43 @@ export const getMOUReports = async () => {
   const res = await api.get('/api/mous/reports/stats/');
   return res.data;
 };
+
+export const getMOUShares = async (id) => {
+  const res = await api.get(`/api/mous/${id}/share/`);
+  return res.data;
+};
+
+export const shareMOU = async (id, data) => {
+  const res = await api.post(`/api/mous/${id}/share/`, data);
+  return res.data;
+};
+
+export const revokeMOUShare = async (shareId) => {
+  const res = await api.delete(`/api/mous/shares/${shareId}/`);
+  return res.data;
+};
+
+export const getMOUSubmissions = async () => {
+  const res = await api.get('/api/mous/submissions/');
+  return res.data;
+};
+
+export const submitDepartmentMOU = async (data) => {
+  const res = await api.post('/api/mous/submissions/', data);
+  return res.data;
+};
+
+export const reviewDepartmentSubmission = async (submissionId, action, comments = '') => {
+  const res = await api.post(`/api/mous/submissions/${submissionId}/review/`, { action, comments });
+  return res.data;
+};
+
+export const getMOUSharedDashboard = async () => {
+  const res = await api.get('/api/mous/shared-dashboard/');
+  return res.data;
+};
+
+export const getMOURenewals = async (id) => {
+  const res = await api.get(`/api/mous/${id}/renewals/`);
+  return res.data;
+};

@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Box, Card, Typography, Button, TextField, MenuItem, Select, 
   FormControl, InputLabel, Grid, Stepper, Step, StepLabel, 
-  Divider, Checkbox, FormControlLabel, FormGroup, Alert, Paper, Chip
+  Divider, Checkbox, FormControlLabel, FormGroup, Alert, Paper, Chip,
+  Autocomplete
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
@@ -11,6 +12,7 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 
 import { getTemplates, createMOU } from '../services/mouApi';
+import api from '../services/api';
 
 const STEPS = ['Basic Information', 'Template Details', 'Duration & Upload', 'Review & Share'];
 
@@ -24,7 +26,11 @@ const MOUCreate = () => {
   // Form Fields
   const [title, setTitle] = useState('');
   const [partnerOrganization, setPartnerOrganization] = useState('');
-  const [departmentName, setDepartmentName] = useState('Engineering');
+  const [departmentName, setDepartmentName] = useState('');
+  const [deptCategories, setDeptCategories] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [filteredFormDepts, setFilteredFormDepts] = useState([]);
+  const [deptCategory, setDeptCategory] = useState('');
   const [mouTypeId, setMouTypeId] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState(null);
 
@@ -54,7 +60,17 @@ const MOUCreate = () => {
         setSelectedTemplate(tmpls[0]);
       }
     });
+
+    api.get('/api/mous/master/dept-categories/').then(res => setDeptCategories(res.data));
+    api.get('/api/mous/master/departments/').then(res => setDepartments(res.data));
   }, []);
+
+  const handleCategoryChange = (e) => {
+    const catId = e.target.value;
+    setDeptCategory(catId);
+    setDepartmentName('');
+    setFilteredFormDepts(departments.filter(d => d.category === catId));
+  };
 
   const handleTemplateChange = (tmplId) => {
     setMouTypeId(tmplId);
@@ -112,10 +128,10 @@ const MOUCreate = () => {
     <Box sx={{ flexGrow: 1, maxWidth: 900, mx: 'auto' }} className="animate-fade-slide-up">
       <Button
         startIcon={<ArrowBackIcon />}
-        onClick={() => navigate('/mou-repository')}
+        onClick={() => navigate('/explorer')}
         sx={{ mb: 2, fontWeight: 700, color: 'text.secondary' }}
       >
-        Back to Repository
+        Back to Explorer
       </Button>
 
       <Typography variant="h4" sx={{ fontWeight: 800, mb: 1 }}>
@@ -170,19 +186,50 @@ const MOUCreate = () => {
               </Grid>
 
               <Grid item xs={12} sm={6}>
-                <FormControl fullWidth>
-                  <InputLabel>Target Department</InputLabel>
+                <FormControl fullWidth required>
+                  <InputLabel>Department Category (Stream)</InputLabel>
                   <Select
-                    value={departmentName}
-                    label="Target Department"
-                    onChange={(e) => setDepartmentName(e.target.value)}
+                    value={deptCategory}
+                    label="Department Category (Stream)"
+                    onChange={handleCategoryChange}
                   >
-                    <MenuItem value="Engineering">Engineering (CSE/ECE)</MenuItem>
-                    <MenuItem value="Medical">Medical & Health Sciences</MenuItem>
-                    <MenuItem value="Commerce">Commerce & Business</MenuItem>
-                    <MenuItem value="Arts">Arts & Humanities</MenuItem>
+                    {deptCategories.map((c) => (
+                      <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
+                    ))}
                   </Select>
                 </FormControl>
+              </Grid>
+
+              <Grid item xs={12} sm={6}>
+                <Autocomplete
+                  disabled={!deptCategory}
+                  options={filteredFormDepts}
+                  getOptionLabel={(option) => {
+                    if (typeof option === 'string') return option;
+                    const catObj = deptCategories.find(c => c.id === deptCategory);
+                    let name = option.name;
+                    if (catObj && catObj.name === 'Aided' && name.endsWith(' (Aided)')) {
+                      return name.slice(0, -8);
+                    }
+                    if (catObj && catObj.name === 'Self-Financed (SFS)' && name.endsWith(' (SFS)')) {
+                      return name.slice(0, -6);
+                    }
+                    return name;
+                  }}
+                  value={filteredFormDepts.find(d => d.name === departmentName) || null}
+                  onChange={(event, newValue) => {
+                    setDepartmentName(newValue ? newValue.name : '');
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      required
+                      label="Target Department"
+                      placeholder="Select department"
+                    />
+                  )}
+                  fullWidth
+                />
               </Grid>
 
               <Grid item xs={12}>

@@ -11,7 +11,7 @@ class FileVersionSerializer(serializers.ModelSerializer):
         model = FileVersion
         fields = [
             'id', 'version_number', 'name', 'size', 
-            'file_type', 'file_url', 'uploaded_by', 'created_at'
+            'file_type', 'file_url', 'uploaded_by', 'created_at', 'google_file_id'
         ]
         read_only_fields = ['version_number', 'created_at']
 
@@ -27,13 +27,16 @@ class FileSerializer(serializers.ModelSerializer):
     file_url = serializers.SerializerMethodField()
     versions = FileVersionSerializer(many=True, read_only=True)
     size_formatted = serializers.SerializerMethodField()
+    submission_metadata = serializers.SerializerMethodField()
 
     class Meta:
         model = File
         fields = [
             'id', 'name', 'size', 'size_formatted', 'file_type', 
             'folder_id', 'uploaded_by', 'file_url', 
-            'version_number', 'versions', 'created_at', 'updated_at'
+            'version_number', 'versions', 'created_at', 'updated_at',
+            'google_file_id', 'mime_type', 'file_size', 'web_view_link', 'web_content_link',
+            'submission_metadata'
         ]
         read_only_fields = ['size', 'file_type', 'version_number', 'created_at', 'updated_at']
 
@@ -49,4 +52,24 @@ class FileSerializer(serializers.ModelSerializer):
             if size < 1024.0:
                 return f"{size:.1f} {unit}"
             size /= 1024.0
-        return f"{size:.1f} TB"
+        return f"{size:.1f} GB"
+
+    def get_submission_metadata(self, obj):
+        sub = obj.department_submissions_signed.first()
+        if sub:
+            return {
+                'id': sub.id,
+                'signed_date': sub.signed_date,
+                'mou_month': sub.mou_month,
+                'mou_year': sub.mou_year,
+                'summary': sub.summary,
+                'purpose': sub.purpose,
+                'benefits': sub.benefits,
+                'remarks': sub.remarks,
+                'uploaded_by': sub.uploaded_by.name if sub.uploaded_by else '',
+                'uploaded_at': sub.uploaded_at,
+                'review_status': sub.review_status,
+                'reviewer_comments': sub.reviewer_comments,
+                'department_name': sub.department.name if sub.department else ''
+            }
+        return None

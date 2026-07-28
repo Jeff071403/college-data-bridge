@@ -6,7 +6,7 @@ import {
   Divider, Badge, Menu, MenuItem, Avatar, Tooltip, 
   Popover, Button, TextField, InputAdornment, Dialog, DialogContent,
   BottomNavigation, BottomNavigationAction, Paper, CircularProgress,
-  Chip
+  Chip, Switch, FormControlLabel
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import DashboardIcon from '@mui/icons-material/Dashboard';
@@ -37,9 +37,14 @@ import ShareIcon from '@mui/icons-material/Share';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import ExtensionIcon from '@mui/icons-material/Extension';
 import BusinessIcon from '@mui/icons-material/Business';
+import SettingsSuggestIcon from '@mui/icons-material/SettingsSuggest';
+import PushPinIcon from '@mui/icons-material/PushPin';
+import PushPinOutlinedIcon from '@mui/icons-material/PushPinOutlined';
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 
 import { useAuth } from '../context/AuthContext';
 import { useThemeMode } from '../context/ThemeContext';
+import { useSiteTime } from '../context/SiteTimeContext';
 import api from '../services/api';
 
 const drawerWidth = 260;
@@ -48,11 +53,19 @@ const drawerWidthCollapsed = 68;
 const Layout = ({ children }) => {
   const { user, logout, hasPermission } = useAuth();
   const { mode, toggleTheme } = useThemeMode();
+  const { siteTime, isCustom, setCustomTime, resetToLive, getFormattedSiteDateTime } = useSiteTime();
+  const [clockAnchor, setClockAnchor] = useState(null);
+  
+  const handleClockOpen = (e) => setClockAnchor(e.currentTarget);
+  const handleClockClose = () => setClockAnchor(null);
   const navigate = useNavigate();
   const location = useLocation();
 
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarHovered, setSidebarHovered] = useState(false);
+  const [sidebarLocked, setSidebarLocked] = useState(() => {
+    try { return localStorage.getItem('sidebar_locked') === 'true'; } catch { return false; }
+  });
   const [profileAnchor, setProfileAnchor] = useState(null);
   const [notiAnchor, setNotiAnchor] = useState(null);
   
@@ -169,14 +182,13 @@ const Layout = ({ children }) => {
 
   const menuItems = [
     { text: 'Dashboard',       icon: <DashboardIcon />,          path: '/',           permission: 'view_dashboard', iconColor: '#4F46E5' },
-    { text: 'MOU Repository',  icon: <AssignmentIcon />,         path: '/mou-repository', permission: 'view_dashboard', iconColor: '#7C3AED' },
     { text: 'Shared With Me',  icon: <ShareIcon />,              path: '/shared',     permission: 'view_dashboard', iconColor: '#3B82F6' },
     { text: 'Departments',     icon: <BusinessIcon />,           path: '/departments', permission: 'view_dashboard', iconColor: '#14B8A6' },
     { text: 'Notifications',   icon: <NotificationsIcon />,      path: '/notifications', permission: 'view_notifications', iconColor: '#F43F5E' },
     { text: 'Reports & Stats', icon: <AssessmentIcon />,         path: '/reports',    permission: 'view_dashboard', iconColor: '#10B981' },
     { text: 'MOU Templates',   icon: <ExtensionIcon />,          path: '/templates',  permission: 'manage_users',   iconColor: '#F59E0B' },
-    { text: 'Folder Explorer', icon: <FolderCopyIcon />,          path: '/explorer',   permission: 'view_folder',    iconColor: '#0EA5E9' },
-    { text: 'User Management', icon: <ManageAccountsIcon />,      path: '/users',      permission: 'manage_users',   iconColor: '#EC4899' },
+    { text: 'MOU Repositories', icon: <FolderCopyIcon />,          path: '/explorer',   permission: 'view_folder',    iconColor: '#0EA5E9' },
+    { text: 'User Management', icon: <ManageAccountsIcon />,      path: '/users',      permission: 'view_dashboard', iconColor: '#EC4899' },
     { text: 'Activity Logs',   icon: <AdminPanelSettingsIcon />,  path: '/logs',       permission: 'manage_users',   iconColor: '#F97316' },
     { text: 'System Settings', icon: <SettingsIcon />,           path: '/settings',   permission: 'view_dashboard', iconColor: '#64748B' },
     { text: 'System Map',      icon: <MapIcon />,                 path: '/system-map', permission: 'view_dashboard', iconColor: '#6366F1' },
@@ -192,15 +204,34 @@ const Layout = ({ children }) => {
     }
   };
 
-  const currentDrawerWidth = sidebarCollapsed ? drawerWidthCollapsed : drawerWidth;
+  const isSidebarExpanded = sidebarLocked || sidebarHovered;
+  const isCollapsed = !isSidebarExpanded;
+  const activeSidebarWidth = isSidebarExpanded ? drawerWidth : drawerWidthCollapsed;
+
+  const handleToggleLock = () => {
+    const next = !sidebarLocked;
+    setSidebarLocked(next);
+    try { localStorage.setItem('sidebar_locked', String(next)); } catch { }
+  };
 
   const sidebarContent = (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflowX: 'hidden' }}>
+
       {/* Brand Header */}
-      <Box sx={{ p: sidebarCollapsed ? 1.5 : 3, display: 'flex', alignItems: 'center', gap: 1.5, minHeight: 64, justifyContent: sidebarCollapsed ? 'center' : 'flex-start', transition: 'padding 0.3s ease' }}>
-        <Avatar sx={{ background: 'linear-gradient(135deg, #4F46E5, #7C3AED)', width: 36, height: 36, flexShrink: 0 }}>
-          <CloudQueueIcon sx={{ color: '#ffffff', fontSize: '1.1rem' }} />
+      <Box sx={{
+        px: 1.5,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1.5,
+        minHeight: 64,
+        justifyContent: isCollapsed ? 'center' : 'flex-start',
+        transition: 'justify-content 0.28s ease',
+        overflow: 'hidden',
+      }}>
+        <Avatar sx={{ background: 'linear-gradient(135deg, #4F46E5, #7C3AED)', width: 36, height: 36, flexShrink: 0, boxShadow: '0 2px 8px rgba(79,70,229,0.35)' }}>
+          <CloudQueueIcon sx={{ color: '#ffffff', fontSize: '1.15rem' }} />
         </Avatar>
+<<<<<<< HEAD
         {!sidebarCollapsed && (
           <Box sx={{ display: 'flex', flexDirection: 'column' }}>
             <Typography variant="subtitle2" sx={{ fontWeight: 800, letterSpacing: '0.5px', fontSize: '0.95rem', background: 'linear-gradient(135deg, #4F46E5, #7C3AED)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', whiteSpace: 'nowrap', lineHeight: 1.2 }}>
@@ -228,76 +259,164 @@ const Layout = ({ children }) => {
               {user?.role?.name || 'User'}
             </Typography>
           </Box>
+=======
+        <Box sx={{
+          maxWidth: isCollapsed ? 0 : 160,
+          overflow: 'hidden',
+          opacity: isCollapsed ? 0 : 1,
+          transition: 'max-width 0.28s cubic-bezier(0.22,1,0.36,1), opacity 0.22s ease',
+          whiteSpace: 'nowrap',
+        }}>
+          <Typography sx={{
+            fontWeight: 800,
+            fontSize: '1.05rem',
+            letterSpacing: '0.3px',
+            background: 'linear-gradient(135deg, #4F46E5, #7C3AED)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+          }}>
+            MOU DocHub
+          </Typography>
+>>>>>>> 9a2f085 (feat: consolidate master data into settings, fix folder/file CRUD, enforce Google Drive primary storage, update user permissions, and streamline user management UI)
         </Box>
-      )}
-      
-      <Divider sx={{ mb: 1 }} />
 
-      {/* Collapse toggle */}
-      <Box sx={{ display: { xs: 'none', md: 'flex' }, justifyContent: sidebarCollapsed ? 'center' : 'flex-end', px: sidebarCollapsed ? 0 : 1.5, mb: 0.5 }}>
-        <Tooltip title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'} placement="right">
-          <IconButton size="small" onClick={() => setSidebarCollapsed(p => !p)}
-            sx={{ color: 'text.secondary', border: '1px solid', borderColor: 'divider', width: 28, height: 28, '&:hover': { borderColor: 'primary.main', color: 'primary.main' } }}>
-            {sidebarCollapsed ? <ChevronRightIcon sx={{ fontSize: '1rem' }} /> : <ChevronLeftIcon sx={{ fontSize: '1rem' }} />}
-          </IconButton>
-        </Tooltip>
+        {/* Lock / Pin Button — visible only when expanded */}
+        <Box sx={{
+          ml: 'auto',
+          maxWidth: isCollapsed ? 0 : 36,
+          opacity: isCollapsed ? 0 : 1,
+          overflow: 'hidden',
+          transition: 'max-width 0.28s cubic-bezier(0.22,1,0.36,1), opacity 0.2s ease',
+          flexShrink: 0,
+        }}>
+          <Tooltip title={sidebarLocked ? 'Unpin sidebar' : 'Pin sidebar open'} placement="right" arrow>
+            <IconButton
+              size="small"
+              onClick={handleToggleLock}
+              sx={{
+                width: 28, height: 28,
+                borderRadius: '8px',
+                color: sidebarLocked ? 'primary.main' : 'text.disabled',
+                bgcolor: sidebarLocked ? 'rgba(79,70,229,0.1)' : 'transparent',
+                border: '1px solid',
+                borderColor: sidebarLocked ? 'primary.light' : 'divider',
+                transition: 'all 0.2s ease',
+                '&:hover': {
+                  bgcolor: sidebarLocked ? 'rgba(79,70,229,0.18)' : 'action.hover',
+                  color: 'primary.main',
+                  borderColor: 'primary.light',
+                },
+                '& svg': {
+                  fontSize: '0.95rem',
+                  transform: sidebarLocked ? 'rotate(-45deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.22s cubic-bezier(0.22,1,0.36,1)',
+                },
+              }}
+            >
+              {sidebarLocked ? <PushPinIcon /> : <PushPinOutlinedIcon />}
+            </IconButton>
+          </Tooltip>
+        </Box>
       </Box>
 
+      <Divider />
+
+      {/* User Quick Info */}
+      <Box sx={{
+        px: 1.5,
+        py: 1.2,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1.2,
+        overflow: 'hidden',
+        minHeight: 56,
+      }}>
+        <Avatar sx={{
+          width: 34, height: 34,
+          border: '2px solid',
+          borderColor: 'primary.light',
+          background: 'linear-gradient(135deg, #4F46E5, #7C3AED)',
+          fontSize: '0.85rem',
+          fontWeight: 700,
+          flexShrink: 0,
+        }}>
+          {user?.name?.charAt(0).toUpperCase()}
+        </Avatar>
+        <Box sx={{
+          maxWidth: isCollapsed ? 0 : 180,
+          overflow: 'hidden',
+          opacity: isCollapsed ? 0 : 1,
+          transition: 'max-width 0.28s cubic-bezier(0.22,1,0.36,1), opacity 0.22s ease',
+          whiteSpace: 'nowrap',
+        }}>
+          <Typography sx={{ fontWeight: 700, fontSize: '0.82rem', color: 'text.primary', lineHeight: 1.2 }} noWrap>
+            {user?.name}
+          </Typography>
+          <Typography sx={{ fontSize: '0.70rem', color: 'text.secondary', lineHeight: 1.4 }} noWrap>
+            {user?.role?.name || 'User'}
+          </Typography>
+        </Box>
+      </Box>
+
+      <Divider />
+
       {/* Navigation List */}
-      <List sx={{ px: 0, flexGrow: 1 }}>
+      <List sx={{ px: 0.5, py: 0.5, flexGrow: 1, overflowY: 'auto', overflowX: 'hidden' }}>
         {menuItems.map((item) => {
           if (item.permission && !hasPermission(item.permission)) return null;
           const isSelected = location.pathname === item.path;
           return (
-            <ListItem key={item.text} disablePadding sx={{ mb: 0.5 }}>
-              <Tooltip title={sidebarCollapsed ? item.text : ''} placement="right">
+            <ListItem key={item.text} disablePadding sx={{ mb: 0.25 }}>
+              <Tooltip title={isCollapsed ? item.text : ''} placement="right" arrow>
                 <ListItemButton
                   onClick={() => { navigate(item.path); setMobileOpen(false); }}
                   selected={isSelected}
                   sx={{
-                    borderRadius: '12px',
-                    py: 1,
-                    px: sidebarCollapsed ? 1 : 2,
-                    mx: sidebarCollapsed ? 0.8 : 1.5,
-                    justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
-                    width: 'auto',
+                    borderRadius: '10px',
+                    py: 0.9,
+                    px: 1,
+                    minHeight: 40,
+                    justifyContent: 'flex-start',
+                    overflow: 'hidden',
                     transition: 'all 0.22s cubic-bezier(0.22,1,0.36,1)',
                     ...(isSelected ? {
                       background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)',
-                      '& .MuiListItemIcon-root': { color: '#ffffff' },
-                      '& .MuiListItemText-root *': { color: '#ffffff' },
-                      boxShadow: '0 4px 14px rgba(79,70,229,0.35)',
+                      boxShadow: '0 4px 12px rgba(79,70,229,0.3)',
                       '&:hover': { opacity: 0.92 },
                     } : {
-                      '&:hover': { bgcolor: 'action.hover', '& .MuiListItemIcon-root': { color: item.iconColor } },
+                      '&:hover': { bgcolor: 'action.hover' },
                     }),
                   }}
                 >
-                  <ListItemIcon sx={{
-                    minWidth: sidebarCollapsed ? 'unset' : 32,
-                    color: isSelected ? '#ffffff' : item.iconColor,
+                  <Box sx={{
                     width: 32, height: 32,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    mr: sidebarCollapsed ? 0 : 1.5,
-                    borderRadius: '10px',
-                    bgcolor: isSelected ? 'rgba(255,255,255,0.18)' : `${item.iconColor}12`,
-                    transition: 'all 0.22s ease',
+                    borderRadius: '8px',
+                    bgcolor: isSelected ? 'rgba(255,255,255,0.18)' : `${item.iconColor}18`,
+                    color: isSelected ? '#ffffff' : item.iconColor,
                     flexShrink: 0,
+                    transition: 'background-color 0.2s ease',
                     '& svg': { fontSize: '1.05rem' },
                   }}>
                     {item.icon}
-                  </ListItemIcon>
-                  {!sidebarCollapsed && (
-                    <ListItemText
-                      primary={item.text}
-                      primaryTypographyProps={{
-                        fontSize: '0.875rem',
-                        fontWeight: isSelected ? 700 : 500,
-                        color: isSelected ? '#ffffff' : 'text.primary',
-                        transition: 'opacity 0.2s ease',
-                      }}
-                    />
-                  )}
+                  </Box>
+                  <Box sx={{
+                    maxWidth: isCollapsed ? 0 : 180,
+                    overflow: 'hidden',
+                    opacity: isCollapsed ? 0 : 1,
+                    transition: 'max-width 0.28s cubic-bezier(0.22,1,0.36,1), opacity 0.2s ease',
+                    whiteSpace: 'nowrap',
+                    ml: 1.2,
+                  }}>
+                    <Typography sx={{
+                      fontSize: '0.858rem',
+                      fontWeight: isSelected ? 700 : 500,
+                      color: isSelected ? '#ffffff' : 'text.primary',
+                      lineHeight: 1,
+                    }}>
+                      {item.text}
+                    </Typography>
+                  </Box>
                 </ListItemButton>
               </Tooltip>
             </ListItem>
@@ -305,110 +424,85 @@ const Layout = ({ children }) => {
         })}
       </List>
 
-      {/* Vector Illustration in Sidebar */}
-      <Box sx={{ p: 2, textAlign: 'center', mt: 'auto', mb: 1, display: { xs: 'none', sm: 'block' } }}>
-        <Box sx={{
-          bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.03)' : '#f8fafc',
-          borderRadius: '16px',
-          p: 2,
-          mx: 0.5,
-          border: '1px solid',
-          borderColor: 'divider',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 1,
-        }}>
-          <svg width="100" height="70" viewBox="0 0 120 90" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ overflow: 'visible' }}>
-            <circle cx="20" cy="30" r="8" fill="rgba(37, 99, 235, 0.03)" />
-            <circle cx="105" cy="45" r="12" fill="rgba(37, 99, 235, 0.03)" />
-            <circle cx="60" cy="15" r="6" fill="rgba(37, 99, 235, 0.04)" />
-
-            <rect x="35" y="40" width="50" height="38" rx="8" fill={(theme) => theme.palette.mode === 'dark' ? '#1e293b' : '#ffffff'} stroke="rgba(37, 99, 235, 0.15)" strokeWidth="1" />
-            <path d="M35 44V42C35 40.8954 35.8954 40 37 40H52L57 45H80C81.1046 45 82 45.8954 82 47V70" stroke="rgba(37, 99, 235, 0.15)" strokeWidth="2" />
-            
-            <rect x="42" y="22" width="36" height="24" rx="4" fill="rgba(37, 99, 235, 0.2)" />
-            <rect x="46" y="28" width="28" height="20" rx="3" fill={(theme) => theme.palette.mode === 'dark' ? '#334155' : '#f8fafc'} />
-            <rect x="51" y="33" width="18" height="2" rx="1" fill="#2563eb" />
-            <rect x="51" y="39" width="12" height="2" rx="1" fill="#2563eb" />
-            
-            <path d="M35 48C35 44.6863 37.6863 42 41 42H79C82.3137 42 85 44.6863 85 48V72C85 75.3137 82.3137 78 79 78H41C37.6863 78 35 75.3137 35 72V48Z" fill="#facc15" />
-            <path d="M35 48L60 62L85 48" stroke="#eab308" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-
-            <g style={{ transform: 'translate(82px, 8px)' }}>
-              <path d="M0 12L18 0L9 16L0 12Z" fill="#2563eb" />
-              <path d="M9 16L18 0L6 9" fill="rgba(37, 99, 235, 0.7)" />
-            </g>
-            <path d="M60 48C64 36 72 26 80 24" stroke="rgba(37, 99, 235, 0.3)" strokeWidth="1.5" strokeDasharray="3 3" strokeLinecap="round" />
-          </svg>
-          <Box>
-            <Typography variant="body2" sx={{ fontWeight: 800, color: 'text.primary', fontSize: '0.82rem' }}>
-              MOU Storage
-            </Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', fontSize: '0.72rem' }}>
-              Efficient, safe & accessible
-            </Typography>
-          </Box>
-        </Box>
-      </Box>
-
       <Divider />
-      
-      {/* Bottom Profile Settings Link & Logout */}
-      <List sx={{ px: 0, py: 1.5 }}>
-        <ListItem disablePadding sx={{ mb: 0.5 }}>
-          <ListItemButton 
+
+      {/* Bottom: Profile & Logout */}
+      <Box sx={{ px: 0.5, py: 1 }}>
+        {/* Profile */}
+        <Tooltip title={isCollapsed ? 'My Profile' : ''} placement="right" arrow>
+          <ListItemButton
             onClick={() => navigate('/profile')}
             selected={location.pathname === '/profile'}
-            sx={{ 
-              borderRadius: '12px',
-              mx: 1.5,
-              py: 0.8,
-              px: 2,
-              width: 'auto',
+            sx={{
+              borderRadius: '10px',
+              py: 0.9, px: 1,
+              mb: 0.25,
+              minHeight: 40,
+              overflow: 'hidden',
               '&.Mui-selected': {
-                bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(37, 99, 235, 0.08)',
-                color: 'primary.main',
-                '& .MuiListItemIcon-root': { color: 'primary.main' },
-                '&:hover': { bgcolor: 'action.hover' }
+                bgcolor: 'primary.main',
+                '& .MuiListItemIcon-root': { color: '#fff' },
+                '&:hover': { bgcolor: 'primary.dark' },
               },
-              '&:hover': { bgcolor: 'action.hover' }
+              '&:hover': { bgcolor: 'action.hover' },
             }}
           >
-            <ListItemIcon sx={{ 
-              minWidth: 32, 
-              color: location.pathname === '/profile' ? 'primary.main' : 'text.secondary',
-              '& svg': { fontSize: '1.2rem' }
+            <Box sx={{
+              width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              borderRadius: '8px',
+              bgcolor: location.pathname === '/profile' ? 'rgba(255,255,255,0.18)' : 'rgba(99,102,241,0.1)',
+              color: location.pathname === '/profile' ? '#fff' : 'primary.main',
+              flexShrink: 0,
+              '& svg': { fontSize: '1.15rem' },
             }}>
               <AccountCircleIcon />
-            </ListItemIcon>
-            <ListItemText primary="My Profile" primaryTypographyProps={{ fontSize: '0.88rem', color: location.pathname === '/profile' ? 'primary.main' : 'text.primary' }} />
+            </Box>
+            <Box sx={{
+              maxWidth: isCollapsed ? 0 : 180, overflow: 'hidden',
+              opacity: isCollapsed ? 0 : 1,
+              transition: 'max-width 0.28s cubic-bezier(0.22,1,0.36,1), opacity 0.2s ease',
+              whiteSpace: 'nowrap', ml: 1.2,
+            }}>
+              <Typography sx={{ fontSize: '0.858rem', fontWeight: 500, color: location.pathname === '/profile' ? '#fff' : 'text.primary' }}>
+                My Profile
+              </Typography>
+            </Box>
           </ListItemButton>
-        </ListItem>
-        <ListItem disablePadding>
-          <ListItemButton 
-            onClick={handleLogout} 
-            sx={{ 
-              borderRadius: '12px', 
-              mx: 1.5,
-              py: 0.8,
-              px: 2,
-              width: 'auto',
-              color: 'error.main',
-              '&:hover': { bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(239, 68, 68, 0.12)' : '#fef2f2' }
+        </Tooltip>
+
+        {/* Sign Out */}
+        <Tooltip title={isCollapsed ? 'Sign Out' : ''} placement="right" arrow>
+          <ListItemButton
+            onClick={handleLogout}
+            sx={{
+              borderRadius: '10px',
+              py: 0.9, px: 1,
+              minHeight: 40,
+              overflow: 'hidden',
+              '&:hover': { bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(239,68,68,0.12)' : '#fef2f2' },
             }}
           >
-            <ListItemIcon sx={{ 
-              minWidth: 32, 
+            <Box sx={{
+              width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              borderRadius: '8px',
+              bgcolor: 'rgba(239,68,68,0.08)',
               color: 'error.main',
-              '& svg': { fontSize: '1.2rem' }
+              flexShrink: 0,
+              '& svg': { fontSize: '1.15rem' },
             }}>
               <LogoutIcon />
-            </ListItemIcon>
-            <ListItemText primary="Sign Out" primaryTypographyProps={{ fontSize: '0.88rem', color: 'error.main' }} />
+            </Box>
+            <Box sx={{
+              maxWidth: isCollapsed ? 0 : 180, overflow: 'hidden',
+              opacity: isCollapsed ? 0 : 1,
+              transition: 'max-width 0.28s cubic-bezier(0.22,1,0.36,1), opacity 0.2s ease',
+              whiteSpace: 'nowrap', ml: 1.2,
+            }}>
+              <Typography sx={{ fontSize: '0.858rem', fontWeight: 500, color: 'error.main' }}>Sign Out</Typography>
+            </Box>
           </ListItemButton>
-        </ListItem>
-      </List>
+        </Tooltip>
+      </Box>
     </Box>
   );
 
@@ -419,10 +513,16 @@ const Layout = ({ children }) => {
       <AppBar
         position="fixed"
         sx={{
-          width: { md: `calc(100% - ${currentDrawerWidth}px)` },
-          ml: { md: `${currentDrawerWidth}px` },
-          transition: 'width 0.3s cubic-bezier(0.22,1,0.36,1), margin-left 0.3s cubic-bezier(0.22,1,0.36,1)',
+          width: { md: `calc(100% - ${activeSidebarWidth}px)` },
+          ml: { md: `${activeSidebarWidth}px` },
+          transition: 'width 0.28s cubic-bezier(0.22,1,0.36,1), margin-left 0.28s cubic-bezier(0.22,1,0.36,1)',
           boxShadow: 'none',
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          backdropFilter: 'blur(12px)',
+          backgroundColor: (theme) => theme.palette.mode === 'dark'
+            ? 'rgba(17,24,39,0.92)'
+            : 'rgba(255,255,255,0.92)',
         }}
       >
         <Toolbar sx={{ justifyContent: 'space-between', gap: 2, minHeight: 64 }}>
@@ -472,6 +572,82 @@ const Layout = ({ children }) => {
           </Box>
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {/* ── Date & Time Display ────────────────── */}
+            <Box
+              onClick={handleClockOpen}
+              sx={{
+                display: 'flex', alignItems: 'center', gap: 0, cursor: 'pointer',
+                border: '1px solid',
+                borderColor: isCustom ? '#f59e0b' : 'divider',
+                borderRadius: '12px',
+                overflow: 'hidden',
+                mr: 1,
+                transition: 'border-color 0.2s, box-shadow 0.2s',
+                '&:hover': { boxShadow: '0 2px 10px rgba(0,0,0,0.08)', borderColor: isCustom ? '#f59e0b' : 'primary.light' },
+              }}
+            >
+              {/* Date block */}
+              <Tooltip title={isCustom ? 'Simulated date (click to edit)' : 'Live date (click to override)'} arrow>
+                <Box sx={{
+                  display: 'flex', alignItems: 'center', gap: 0.75,
+                  px: 1.5, py: 0.65,
+                  bgcolor: isCustom ? 'rgba(245,158,11,0.08)' : (theme) => theme.palette.mode === 'dark' ? '#1e293b' : '#f8fafc',
+                  borderRight: '1px solid',
+                  borderColor: isCustom ? 'rgba(245,158,11,0.3)' : 'divider',
+                }}>
+                  <Box sx={{
+                    width: 22, height: 22, borderRadius: '6px',
+                    bgcolor: isCustom ? 'rgba(245,158,11,0.15)' : 'rgba(79,70,229,0.1)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0,
+                  }}>
+                    <CalendarTodayIcon sx={{ fontSize: '0.75rem', color: isCustom ? '#f59e0b' : 'primary.main' }} />
+                  </Box>
+                  <Typography sx={{
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    color: isCustom ? '#d97706' : 'text.primary',
+                    letterSpacing: '0.2px',
+                    whiteSpace: 'nowrap',
+                    fontFamily: 'monospace',
+                  }}>
+                    {siteTime.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </Typography>
+                </Box>
+              </Tooltip>
+
+              {/* Time block */}
+              <Tooltip title={isCustom ? 'Simulated time (click to edit)' : 'Live time (click to override)'} arrow>
+                <Box sx={{
+                  display: 'flex', alignItems: 'center', gap: 0.75,
+                  px: 1.5, py: 0.65,
+                  bgcolor: isCustom ? 'rgba(245,158,11,0.05)' : (theme) => theme.palette.mode === 'dark' ? '#1a2234' : '#ffffff',
+                }}>
+                  <Box sx={{
+                    width: 22, height: 22, borderRadius: '6px',
+                    bgcolor: isCustom ? 'rgba(245,158,11,0.15)' : 'rgba(16,185,129,0.1)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0,
+                  }}>
+                    <HistoryIcon sx={{ fontSize: '0.75rem', color: isCustom ? '#f59e0b' : '#10B981' }} />
+                  </Box>
+                  <Typography sx={{
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    color: isCustom ? '#d97706' : 'text.primary',
+                    letterSpacing: '0.5px',
+                    whiteSpace: 'nowrap',
+                    fontFamily: 'monospace',
+                  }}>
+                    {siteTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
+                  </Typography>
+                  {isCustom && (
+                    <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: '#f59e0b', flexShrink: 0, animation: 'pulse 1.5s ease-in-out infinite', '@keyframes pulse': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0.3 } } }} />
+                  )}
+                </Box>
+              </Tooltip>
+            </Box>
+
             {/* Quick System Map / Help Button */}
             <Tooltip title="How This System Works (Lifecycle Guide)">
               <IconButton 
@@ -521,6 +697,72 @@ const Layout = ({ children }) => {
           </Box>
         </Toolbar>
       </AppBar>
+
+      {/* Clock Override Popover */}
+      <Popover
+        open={Boolean(clockAnchor)}
+        anchorEl={clockAnchor}
+        onClose={handleClockClose}
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'right',
+        }}
+        transformOrigin={{
+          vertical: 'top',
+          horizontal: 'right',
+        }}
+        PaperProps={{ sx: { p: 2.5, width: 280, borderRadius: '16px', mt: 1.5 } }}
+      >
+        <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1.5 }}>
+          Site Date & Time Override
+        </Typography>
+        
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={isCustom}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    setCustomTime(siteTime.toISOString());
+                  } else {
+                    resetToLive();
+                  }
+                }}
+              />
+            }
+            label={
+              <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                Override System Clock
+              </Typography>
+            }
+          />
+
+          {isCustom && (
+            <TextField
+              label="Simulated Date & Time"
+              type="datetime-local"
+              size="small"
+              value={getFormattedSiteDateTime()}
+              onChange={(e) => setCustomTime(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+            />
+          )}
+
+          {isCustom && (
+            <Button 
+              variant="outlined" 
+              color="primary" 
+              size="small" 
+              onClick={() => { resetToLive(); handleClockClose(); }}
+              sx={{ borderRadius: '8px', fontWeight: 700 }}
+            >
+              Reset to Live Clock
+            </Button>
+          )}
+        </Box>
+      </Popover>
 
       {/* Notifications Popover list */}
       <Popover
@@ -638,7 +880,14 @@ const Layout = ({ children }) => {
       </Menu>
 
       {/* Drawer Sidebar (Navigation panel) */}
-      <Box component="nav" sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}>
+      <Box
+        component="nav"
+        sx={{
+          width: { md: activeSidebarWidth },
+          flexShrink: { md: 0 },
+          transition: 'width 0.28s cubic-bezier(0.22,1,0.36,1)',
+        }}
+      >
         {/* Mobile drawer */}
         <Drawer
           variant="temporary"
@@ -660,20 +909,24 @@ const Layout = ({ children }) => {
           {sidebarContent}
         </Drawer>
         
-        {/* Desktop drawer */}
+        {/* Desktop drawer — icon-only by default, expands on hover or when locked */}
         <Drawer
           variant="permanent"
+          onMouseEnter={() => !sidebarLocked && setSidebarHovered(true)}
+          onMouseLeave={() => !sidebarLocked && setSidebarHovered(false)}
           sx={{
             display: { xs: 'none', md: 'block' },
             '& .MuiDrawer-paper': {
               boxSizing: 'border-box',
-              width: currentDrawerWidth,
+              width: isSidebarExpanded ? drawerWidth : drawerWidthCollapsed,
               borderRight: (theme) => `1px solid ${theme.palette.divider}`,
               backgroundImage: 'none',
               background: (theme) => theme.palette.mode === 'dark' ? '#12141E' : '#ffffff',
               color: 'text.primary',
               overflowX: 'hidden',
-              transition: 'width 0.3s cubic-bezier(0.22,1,0.36,1)',
+              transition: 'width 0.28s cubic-bezier(0.22,1,0.36,1)',
+              boxShadow: (sidebarHovered && !sidebarLocked) ? '4px 0 24px rgba(0,0,0,0.12)' : 'none',
+              zIndex: 1300,
             },
           }}
           open
@@ -687,13 +940,12 @@ const Layout = ({ children }) => {
         component="main"
         sx={{
           flexGrow: 1,
-          p: 3,
-          width: { md: `calc(100% - ${currentDrawerWidth}px)` },
+          minWidth: 0,
+          p: 2.5,
           mt: 8,
           mb: { xs: 8, md: 0 },
           bgcolor: 'background.default',
-          transition: 'width 0.3s cubic-bezier(0.22,1,0.36,1)',
-          animation: 'fadeSlideUp 0.35s cubic-bezier(0.22,1,0.36,1) both',
+          overflow: 'hidden',
         }}
       >
         {children}
@@ -817,7 +1069,7 @@ const Layout = ({ children }) => {
 
                 <ListItemButton onClick={() => handleCommandAction('/explorer')} sx={{ py: 1.2, px: 2.5, gap: 2 }}>
                   <FolderCopyIcon sx={{ color: '#10b981', fontSize: '1.2rem' }} />
-                  <ListItemText primary="Go to Folder Explorer" primaryTypographyProps={{ fontSize: '0.9rem', fontWeight: 600 }} />
+                  <ListItemText primary="Go to MOU Repositories" primaryTypographyProps={{ fontSize: '0.9rem', fontWeight: 600 }} />
                   <ArrowForwardIosIcon sx={{ fontSize: '0.65rem', color: 'text.secondary' }} />
                 </ListItemButton>
 

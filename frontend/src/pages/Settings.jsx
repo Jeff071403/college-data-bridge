@@ -1,179 +1,923 @@
-import React, { useState } from 'react';
-import { 
-  Box, Card, CardContent, Typography, Grid, Switch, 
-  FormControlLabel, Button, TextField, MenuItem, Select, 
-  FormControl, InputLabel, Divider, Alert, Avatar, Chip
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Box, Card, CardContent, Typography, Grid, Switch,
+  FormControlLabel, Button, TextField, MenuItem, Select,
+  FormControl, InputLabel, Divider, Alert, Avatar, Chip,
+  Tabs, Tab, Slider, IconButton, Dialog, DialogTitle,
+  DialogContent, DialogActions, Table, TableBody, TableCell,
+  TableContainer, TableHead, TableRow, Paper, CircularProgress,
+  Tooltip, Badge
 } from '@mui/material';
 import SettingsIcon from '@mui/icons-material/Settings';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import StorageIcon from '@mui/icons-material/Storage';
 import PaletteIcon from '@mui/icons-material/Palette';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ListAltIcon from '@mui/icons-material/ListAlt';
+import AddIcon from '@mui/icons-material/Add';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import SchoolIcon from '@mui/icons-material/School';
+import CategoryIcon from '@mui/icons-material/Category';
+import BusinessIcon from '@mui/icons-material/Business';
+import LocalOfferIcon from '@mui/icons-material/LocalOffer';
+import DescriptionIcon from '@mui/icons-material/Description';
+import HandshakeIcon from '@mui/icons-material/Handshake';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import SettingsSuggestIcon from '@mui/icons-material/SettingsSuggest';
 
 import { useThemeMode } from '../context/ThemeContext';
+import {
+  getMasterDeptCategories, createMasterDeptCategory, updateMasterDeptCategory, deleteMasterDeptCategory,
+  getMasterDepartments, createMasterDepartment, updateMasterDepartment, deleteMasterDepartment,
+  getMasterCollabTypes, createMasterCollabType, updateMasterCollabType, deleteMasterCollabType,
+  getMasterOrgTypes, createMasterOrgType, updateMasterOrgType, deleteMasterOrgType,
+  getMasterDocTypes, createMasterDocType, updateMasterDocType, deleteMasterDocType,
+  getMasterTags, createMasterTag, updateMasterTag, deleteMasterTag,
+  getMasterCategories, createMasterCategory, updateMasterCategory, deleteMasterCategory
+} from '../services/templateApi';
 
-const Settings = () => {
-  const { mode, toggleTheme } = useThemeMode();
+// ── Tab Panel Wrapper ──────────────────────────────────────────────────────────
+function TabPanel({ children, value, index }) {
+  return value === index ? <Box sx={{ pt: 3 }}>{children}</Box> : null;
+}
 
-  // Settings State
-  const [emailAlerts, setEmailAlerts] = useState(true);
-  const [inAppAlerts, setInAppAlerts] = useState(true);
-  const [reminder30Days, setReminder30Days] = useState(true);
-  const [reminder15Days, setReminder15Days] = useState(true);
-  const [reminder7Days, setReminder7Days] = useState(true);
-  const [reminder1Day, setReminder1Day] = useState(true);
+// ── Master Data Config sub-tab config ────────────────────────────────────────
+const MASTER_TABS = [
+  { label: 'Template Categories', fetch: getMasterCategories,     create: createMasterCategory,     update: updateMasterCategory,     del: deleteMasterCategory     },
+  { label: 'Organization Types',  fetch: getMasterOrgTypes,       create: createMasterOrgType,       update: updateMasterOrgType,       del: deleteMasterOrgType       },
+  { label: 'Collaboration Types', fetch: getMasterCollabTypes,    create: createMasterCollabType,    update: updateMasterCollabType,    del: deleteMasterCollabType    },
+  { label: 'Document Types',      fetch: getMasterDocTypes,       create: createMasterDocType,       update: updateMasterDocType,       del: deleteMasterDocType       },
+  { label: 'Tags',                fetch: getMasterTags,           create: createMasterTag,           update: updateMasterTag,           del: deleteMasterTag           },
+  { label: 'Dept. Categories',    fetch: getMasterDeptCategories, create: createMasterDeptCategory,  update: updateMasterDeptCategory,  del: deleteMasterDeptCategory  },
+  { label: 'Departments',         fetch: getMasterDepartments,    create: createMasterDepartment,    update: updateMasterDepartment,    del: deleteMasterDepartment    },
+];
 
-  const [storageThreshold, setStorageThreshold] = useState(85);
-  const [savedSuccess, setSavedSuccess] = useState(false);
+const MasterDataTab = () => {
+  const [activeSubTab, setActiveSubTab] = useState(0);
+  const [mdLoading, setMdLoading] = useState(false);
+  const [mdError, setMdError] = useState(null);
+  const [mdData, setMdData] = useState([]);
+  const [deptCategories, setDeptCategories] = useState([]);
+  const [mdOpen, setMdOpen] = useState(false);
+  const [mdEditId, setMdEditId] = useState(null);
+  const [mdName, setMdName] = useState('');
+  const [mdSelectedCat, setMdSelectedCat] = useState('');
+  const [mdSaving, setMdSaving] = useState(false);
 
-  const handleSave = (e) => {
-    e.preventDefault();
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 4000);
+  // Helper to extract error message from API response
+  const extractError = (err) =>
+    err?.response?.data?.detail ||
+    err?.response?.data?.name?.[0] ||
+    err?.message ||
+    'An unexpected error occurred.';
+
+  const currentMdTab = MASTER_TABS[activeSubTab];
+  const isDeptTab = activeSubTab === 6;
+
+  const loadMdData = async () => {
+    setMdLoading(true); setMdError(null);
+    try {
+      const result = await currentMdTab.fetch();
+      setMdData(result);
+      if (isDeptTab) {
+        const cats = await getMasterDeptCategories();
+        setDeptCategories(cats);
+      }
+    } catch (err) {
+      console.error(err);
+      setMdError('Failed to load lookup data.');
+    } finally {
+      setMdLoading(false);
+    }
+  };
+
+  useEffect(() => { loadMdData(); }, [activeSubTab]);
+
+  const openMdDialog = (item = null) => {
+    setMdEditId(item ? item.id : null);
+    setMdName(item ? item.name : '');
+    setMdSelectedCat(item ? (item.category || '') : '');
+    setMdOpen(true);
+  };
+
+  const closeMdDialog = () => { setMdOpen(false); setMdName(''); setMdSelectedCat(''); };
+
+  const handleMdSave = async () => {
+    if (!mdName.trim()) return;
+    const payload = { name: mdName.trim() };
+    if (isDeptTab) payload.category = mdSelectedCat;
+    setMdSaving(true);
+    try {
+      if (mdEditId) await currentMdTab.update(mdEditId, { ...payload, is_active: true });
+      else await currentMdTab.create(payload);
+      closeMdDialog();
+      loadMdData();
+    } catch (err) {
+      console.error(err);
+      setMdError(extractError(err));
+    } finally {
+      setMdSaving(false);
+    }
+  };
+
+  const handleMdToggle = async (item) => {
+    try {
+      const payload = { name: item.name, is_active: !item.is_active };
+      if (isDeptTab) payload.category = item.category;
+      await currentMdTab.update(item.id, payload);
+      loadMdData();
+    } catch (err) { setMdError(extractError(err)); }
+  };
+
+  const handleMdDelete = async (id, name) => {
+    if (!window.confirm(`Delete "${name}"? Items linked to active records cannot be removed — deactivate them instead.`)) return;
+    try { await currentMdTab.del(id); loadMdData(); }
+    catch (err) { setMdError(extractError(err)); }
   };
 
   return (
-    <Box sx={{ flexGrow: 1, maxWidth: 900, mx: 'auto' }} className="animate-fade-slide-up">
+    <Box>
+      <Box sx={{ mb: 2.5, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <Box>
+          <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 0.5 }}>Master Data Configuration</Typography>
+          <Typography variant="caption" color="text.secondary">
+            Add, update, or deactivate dropdown options used across MOU forms and user management.
+          </Typography>
+        </Box>
+        <Button variant="contained" startIcon={<AddIcon />} onClick={() => openMdDialog()}
+          sx={{ borderRadius: '20px', px: 2.5, fontWeight: 700, flexShrink: 0 }}>
+          Add Option
+        </Button>
+      </Box>
+
+      {mdError && (
+        <Alert
+          severity="error"
+          sx={{ mb: 2, borderRadius: '12px' }}
+          onClose={() => setMdError(null)}
+        >
+          {mdError}
+        </Alert>
+      )}
+
+      <Card sx={{ borderRadius: '16px', border: '1px solid', borderColor: 'divider', boxShadow: 'none' }}>
+        <Tabs value={activeSubTab} onChange={(_, v) => setActiveSubTab(v)} variant="scrollable" scrollButtons="auto"
+          sx={{ px: 2, borderBottom: 1, borderColor: 'divider', '& .MuiTab-root': { fontWeight: 700, py: 1.8, fontSize: '0.8rem' } }}>
+          {MASTER_TABS.map((t, i) => <Tab key={i} label={t.label} />)}
+        </Tabs>
+
+        {mdLoading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress /></Box>
+        ) : (
+          <TableContainer component={Paper} sx={{ boxShadow: 'none', borderRadius: '0 0 16px 16px' }}>
+            <Table>
+              <TableHead sx={{ bgcolor: 'action.hover' }}>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 800 }}>ID</TableCell>
+                  <TableCell sx={{ fontWeight: 800 }}>Lookup Value</TableCell>
+                  {isDeptTab && <TableCell sx={{ fontWeight: 800 }}>Category</TableCell>}
+                  <TableCell sx={{ fontWeight: 800 }}>Status</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 800 }}>Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {mdData.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={isDeptTab ? 5 : 4} align="center" sx={{ py: 6 }}>
+                      <Typography color="text.secondary">No lookup values added yet.</Typography>
+                    </TableCell>
+                  </TableRow>
+                ) : mdData.map(item => (
+                  <TableRow key={item.id} hover>
+                    <TableCell>{item.id}</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>{item.name}</TableCell>
+                    {isDeptTab && <TableCell><Chip label={item.category_name || 'Unassigned'} size="small" color="primary" variant="outlined" /></TableCell>}
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Switch size="small" checked={item.is_active} onChange={() => handleMdToggle(item)} />
+                        <Chip label={item.is_active ? 'Active' : 'Disabled'} size="small"
+                          color={item.is_active ? 'success' : 'default'} sx={{ fontWeight: 800, height: 20 }} />
+                      </Box>
+                    </TableCell>
+                    <TableCell align="right">
+                      <IconButton size="small" onClick={() => openMdDialog(item)} sx={{ mr: 1, color: 'primary.main' }}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton size="small" onClick={() => handleMdDelete(item.id, item.name)} sx={{ color: 'error.main' }}>
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+      </Card>
+
+      <Dialog open={mdOpen} onClose={closeMdDialog} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: '20px' } }}>
+        <DialogTitle sx={{ fontWeight: 800 }}>
+          {mdEditId ? `Edit ${currentMdTab.label}` : `Add New ${currentMdTab.label}`}
+        </DialogTitle>
+        <DialogContent dividers>
+          <TextField autoFocus margin="dense" label="Name / Value" fullWidth required variant="outlined"
+            value={mdName} onChange={e => setMdName(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleMdSave()} sx={{ mb: 2 }} />
+          {isDeptTab && (
+            <FormControl fullWidth sx={{ mt: 1 }}>
+              <InputLabel>Category</InputLabel>
+              <Select value={mdSelectedCat} label="Category" onChange={e => setMdSelectedCat(e.target.value)}>
+                {deptCategories.map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
+              </Select>
+            </FormControl>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={closeMdDialog} sx={{ fontWeight: 700 }} disabled={mdSaving}>Cancel</Button>
+          <Button onClick={handleMdSave} variant="contained" sx={{ borderRadius: '12px', fontWeight: 700 }}
+            disabled={mdSaving} startIcon={mdSaving ? <CircularProgress size={14} color="inherit" /> : null}>
+            {mdSaving ? 'Saving...' : 'Save Changes'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+};
+
+// ── Color Swatch Picker ───────────────────────────────────────────────────────
+const PRESET_COLORS = [
+  { label: 'Indigo (Default)', primary: '#4F46E5', secondary: '#7C3AED' },
+  { label: 'Blue Ocean',       primary: '#0EA5E9', secondary: '#0284C7' },
+  { label: 'Emerald Green',    primary: '#10B981', secondary: '#059669' },
+  { label: 'Rose Red',         primary: '#F43F5E', secondary: '#E11D48' },
+  { label: 'Amber Gold',       primary: '#F59E0B', secondary: '#D97706' },
+  { label: 'Teal Cyan',        primary: '#14B8A6', secondary: '#0D9488' },
+  { label: 'Purple Violet',    primary: '#8B5CF6', secondary: '#7C3AED' },
+  { label: 'Slate Gray',       primary: '#64748B', secondary: '#475569' },
+];
+
+const FONT_OPTIONS = [
+  { label: 'Plus Jakarta Sans (Default)', value: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif" },
+  { label: 'Inter',         value: "'Inter', system-ui, sans-serif" },
+  { label: 'Roboto',        value: "'Roboto', system-ui, sans-serif" },
+  { label: 'Poppins',       value: "'Poppins', system-ui, sans-serif" },
+  { label: 'DM Sans',       value: "'DM Sans', system-ui, sans-serif" },
+  { label: 'Outfit',        value: "'Outfit', system-ui, sans-serif" },
+  { label: 'Nunito',        value: "'Nunito', system-ui, sans-serif" },
+];
+
+// ── Inline MasterData List Component ─────────────────────────────────────────
+const MasterList = ({ icon, title, color, fetchFn, createFn, updateFn, deleteFn, extraField }) => {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editItem, setEditItem] = useState(null);
+  const [nameVal, setNameVal] = useState('');
+  const [extraVal, setExtraVal] = useState('');
+  const [extraOptions, setExtraOptions] = useState([]);
+  const [err, setErr] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await fetchFn();
+      setItems(data);
+    } catch { /* ignore */ }
+    finally { setLoading(false); }
+  }, [fetchFn]);
+
+  useEffect(() => {
+    load();
+    if (extraField?.fetchOptions) {
+      extraField.fetchOptions().then(setExtraOptions).catch(() => {});
+    }
+  }, [load]);
+
+  const openCreate = () => { setEditItem(null); setNameVal(''); setExtraVal(''); setErr(''); setDialogOpen(true); };
+  const openEdit = (item) => { setEditItem(item); setNameVal(item.name); setExtraVal(item[extraField?.key] || ''); setErr(''); setDialogOpen(true); };
+
+  const handleSave = async () => {
+    if (!nameVal.trim()) { setErr('Name is required.'); return; }
+    const payload = { name: nameVal.trim() };
+    if (extraField) payload[extraField.key] = extraVal;
+    try {
+      if (editItem) { await updateFn(editItem.id, { ...payload, is_active: true }); }
+      else { await createFn(payload); }
+      setDialogOpen(false);
+      load();
+    } catch (e) {
+      setErr(e?.response?.data?.name?.[0] || 'Save failed. Value may be a duplicate.');
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Delete this item? Items linked to active records cannot be removed.')) return;
+    try { await deleteFn(id); load(); }
+    catch { setErr('Cannot delete — item is currently in use.'); }
+  };
+
+  return (
+    <Card sx={{ borderRadius: '16px', border: '1px solid', borderColor: 'divider', boxShadow: 'none', height: '100%' }}>
+      <CardContent sx={{ p: 0 }}>
+        {/* Header */}
+        <Box sx={{ px: 2.5, py: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid', borderColor: 'divider' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Avatar sx={{ width: 32, height: 32, borderRadius: '10px', bgcolor: `${color}18` }}>
+              {React.cloneElement(icon, { sx: { fontSize: '1rem', color } })}
+            </Avatar>
+            <Box>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800, lineHeight: 1 }}>{title}</Typography>
+              <Typography variant="caption" color="text.secondary">{items.length} items</Typography>
+            </Box>
+          </Box>
+          <Tooltip title={`Add ${title}`}>
+            <IconButton
+              size="small"
+              onClick={openCreate}
+              sx={{ bgcolor: `${color}15`, color, '&:hover': { bgcolor: `${color}25` }, borderRadius: '10px' }}
+            >
+              <AddIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Box>
+
+        {/* List */}
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+            <CircularProgress size={24} />
+          </Box>
+        ) : (
+          <Box sx={{ maxHeight: 280, overflowY: 'auto' }}>
+            {items.length === 0 ? (
+              <Box sx={{ textAlign: 'center', py: 4 }}>
+                <Typography variant="caption" color="text.secondary">No items yet. Click + to add.</Typography>
+              </Box>
+            ) : (
+              items.map((item) => (
+                <Box
+                  key={item.id}
+                  sx={{
+                    px: 2.5, py: 1.2,
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    borderBottom: '1px solid', borderColor: 'divider',
+                    '&:last-child': { borderBottom: 0 },
+                    '&:hover': { bgcolor: 'action.hover' },
+                    transition: 'background 0.15s',
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
+                    <Box
+                      sx={{
+                        width: 8, height: 8, borderRadius: '50%',
+                        bgcolor: item.is_active !== false ? color : '#94A3B8',
+                        flexShrink: 0
+                      }}
+                    />
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.82rem', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {item.name}
+                      </Typography>
+                      {extraField && item[`${extraField.key}_name`] && (
+                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+                          {item[`${extraField.key}_name`]}
+                        </Typography>
+                      )}
+                    </Box>
+                  </Box>
+                  <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+                    <IconButton size="small" onClick={() => openEdit(item)} sx={{ color: 'primary.main', p: 0.5 }}>
+                      <EditIcon sx={{ fontSize: '0.85rem' }} />
+                    </IconButton>
+                    <IconButton size="small" onClick={() => handleDelete(item.id)} sx={{ color: 'error.main', p: 0.5 }}>
+                      <DeleteIcon sx={{ fontSize: '0.85rem' }} />
+                    </IconButton>
+                  </Box>
+                </Box>
+              ))
+            )}
+          </Box>
+        )}
+      </CardContent>
+
+      {/* Add/Edit Dialog */}
+      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: '20px' } }}>
+        <DialogTitle sx={{ fontWeight: 800, pb: 1 }}>
+          {editItem ? `Edit ${title}` : `Add ${title}`}
+        </DialogTitle>
+        <DialogContent>
+          {err && <Alert severity="error" sx={{ mb: 2, borderRadius: '10px' }}>{err}</Alert>}
+          <TextField
+            autoFocus
+            label="Name / Value"
+            fullWidth
+            value={nameVal}
+            onChange={e => setNameVal(e.target.value)}
+            sx={{ mt: 1 }}
+            onKeyDown={e => e.key === 'Enter' && handleSave()}
+          />
+          {extraField && (
+            <FormControl fullWidth sx={{ mt: 2 }}>
+              <InputLabel>{extraField.label}</InputLabel>
+              <Select value={extraVal} label={extraField.label} onChange={e => setExtraVal(e.target.value)}>
+                {extraOptions.map(opt => (
+                  <MenuItem key={opt.id} value={opt.id}>{opt.name}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5 }}>
+          <Button onClick={() => setDialogOpen(false)} sx={{ fontWeight: 700 }}>Cancel</Button>
+          <Button onClick={handleSave} variant="contained" sx={{ borderRadius: '12px', fontWeight: 700 }}>
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Card>
+  );
+};
+
+// ── Main Settings Component ───────────────────────────────────────────────────
+const Settings = () => {
+  const { mode, toggleTheme, primaryColor, secondaryColor, fontFamily, borderRadius: themeBorderRadius, applyAppearance } = useThemeMode();
+
+  const [activeTab, setActiveTab] = useState(0);
+  const [savedSuccess, setSavedSuccess] = useState('');
+
+  // ── Appearance State ──
+  const [selectedPreset, setSelectedPreset] = useState(() => {
+    const saved = localStorage.getItem('app_primary_color');
+    const preset = PRESET_COLORS.find(p => p.primary === saved);
+    return preset ? preset.label : 'Indigo (Default)';
+  });
+  const [customPrimary, setCustomPrimary] = useState(() => localStorage.getItem('app_primary_color') || '#4F46E5');
+  const [customSecondary, setCustomSecondary] = useState(() => localStorage.getItem('app_secondary_color') || '#7C3AED');
+  const [selectedFont, setSelectedFont] = useState(() => localStorage.getItem('app_font_family') || FONT_OPTIONS[0].value);
+  const [radiusValue, setRadiusValue] = useState(() => parseInt(localStorage.getItem('app_border_radius') || '14'));
+
+  // ── Notification State ──
+  const [emailAlerts, setEmailAlerts] = useState(() => JSON.parse(localStorage.getItem('notify_email') ?? 'true'));
+  const [inAppAlerts, setInAppAlerts] = useState(() => JSON.parse(localStorage.getItem('notify_inapp') ?? 'true'));
+  const [reminder30Days, setReminder30Days] = useState(() => JSON.parse(localStorage.getItem('remind_30') ?? 'true'));
+  const [reminder15Days, setReminder15Days] = useState(() => JSON.parse(localStorage.getItem('remind_15') ?? 'true'));
+  const [reminder7Days, setReminder7Days] = useState(() => JSON.parse(localStorage.getItem('remind_7') ?? 'true'));
+  const [reminder1Day, setReminder1Day] = useState(() => JSON.parse(localStorage.getItem('remind_1') ?? 'true'));
+
+  // ── Storage State ──
+  const [storageThreshold, setStorageThreshold] = useState(() => parseInt(localStorage.getItem('storage_threshold') || '85'));
+
+  // ── Apply preset ──
+  const applyPreset = (preset) => {
+    setSelectedPreset(preset.label);
+    setCustomPrimary(preset.primary);
+    setCustomSecondary(preset.secondary);
+  };
+
+  // ── Save Appearance ──
+  const handleSaveAppearance = () => {
+    localStorage.setItem('app_primary_color', customPrimary);
+    localStorage.setItem('app_secondary_color', customSecondary);
+    localStorage.setItem('app_font_family', selectedFont);
+    localStorage.setItem('app_border_radius', String(radiusValue));
+    applyAppearance({ primary: customPrimary, secondary: customSecondary, font: selectedFont, radius: radiusValue });
+    setSavedSuccess('Appearance settings applied! Reload if colors don\'t update immediately.');
+    setTimeout(() => setSavedSuccess(''), 4000);
+  };
+
+  const handleResetAppearance = () => {
+    const def = PRESET_COLORS[0];
+    applyPreset(def);
+    setSelectedFont(FONT_OPTIONS[0].value);
+    setRadiusValue(14);
+  };
+
+  // ── Save Notifications ──
+  const handleSaveNotifications = () => {
+    localStorage.setItem('notify_email', JSON.stringify(emailAlerts));
+    localStorage.setItem('notify_inapp', JSON.stringify(inAppAlerts));
+    localStorage.setItem('remind_30', JSON.stringify(reminder30Days));
+    localStorage.setItem('remind_15', JSON.stringify(reminder15Days));
+    localStorage.setItem('remind_7', JSON.stringify(reminder7Days));
+    localStorage.setItem('remind_1', JSON.stringify(reminder1Day));
+    setSavedSuccess('Notification preferences saved successfully!');
+    setTimeout(() => setSavedSuccess(''), 4000);
+  };
+
+  // ── Save Storage ──
+  const handleSaveStorage = () => {
+    localStorage.setItem('storage_threshold', String(storageThreshold));
+    setSavedSuccess('Storage threshold updated successfully!');
+    setTimeout(() => setSavedSuccess(''), 4000);
+  };
+
+  const tabSx = {
+    fontWeight: 700,
+    fontSize: '0.82rem',
+    textTransform: 'none',
+    minHeight: 48,
+    '&.Mui-selected': { color: 'primary.main' }
+  };
+
+  return (
+    <Box sx={{ flexGrow: 1, maxWidth: 1100, mx: 'auto' }} className="animate-fade-slide-up">
       {/* Header */}
       <Box sx={{ mb: 3.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-        <Avatar sx={{ background: 'linear-gradient(135deg, #4F46E5, #7C3AED)', width: 44, height: 44, borderRadius: '14px' }}>
+        <Avatar sx={{ background: 'linear-gradient(135deg, #4F46E5, #7C3AED)', width: 48, height: 48, borderRadius: '14px' }}>
           <SettingsIcon />
         </Avatar>
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 800 }}>
-            System Settings & Preferences
-          </Typography>
+          <Typography variant="h4" sx={{ fontWeight: 800 }}>Site Settings</Typography>
           <Typography variant="body2" color="text.secondary">
-            Configure automated MOU expiry reminder schedules, email notifications, and storage thresholds.
+            Manage appearance, dropdown content, notifications and system preferences.
           </Typography>
         </Box>
       </Box>
 
       {savedSuccess && (
         <Alert severity="success" sx={{ mb: 3, borderRadius: '14px', fontWeight: 700 }}>
-          Settings updated successfully! Automated schedules are active.
+          {savedSuccess}
         </Alert>
       )}
 
-      <Box component="form" onSubmit={handleSave}>
-        <Grid container spacing={3}>
-          
-          {/* Automated Expiry Reminders Config */}
-          <Grid item xs={12} md={6}>
-            <Card sx={{ borderRadius: '20px', border: '1px solid', borderColor: 'divider', height: '100%' }}>
-              <CardContent sx={{ p: 3 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                  <NotificationsActiveIcon sx={{ color: 'primary.main' }} />
-                  <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
-                    Automated Expiry Reminders
+      {/* Tabs */}
+      <Card sx={{ borderRadius: '20px', border: '1px solid', borderColor: 'divider', boxShadow: 'none' }}>
+        <Box sx={{ borderBottom: '1px solid', borderColor: 'divider', px: 2 }}>
+          <Tabs
+            value={activeTab}
+            onChange={(_, v) => setActiveTab(v)}
+            variant="scrollable"
+            scrollButtons="auto"
+            TabIndicatorProps={{ sx: { height: 3, borderRadius: '3px 3px 0 0' } }}
+          >
+            <Tab icon={<PaletteIcon fontSize="small" />} iconPosition="start" label="Appearance" sx={tabSx} />
+            <Tab icon={<SettingsSuggestIcon fontSize="small" />} iconPosition="start" label="Master Data Config" sx={tabSx} />
+            <Tab icon={<NotificationsActiveIcon fontSize="small" />} iconPosition="start" label="Notifications" sx={tabSx} />
+            <Tab icon={<StorageIcon fontSize="small" />} iconPosition="start" label="Storage" sx={tabSx} />
+          </Tabs>
+        </Box>
+
+        <Box sx={{ p: 3 }}>
+
+          {/* ════════════════════════ TAB 1: APPEARANCE ════════════════════════ */}
+          <TabPanel value={activeTab} index={0}>
+            <Grid container spacing={3}>
+              {/* Color Presets */}
+              <Grid item xs={12} md={7}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 0.5 }}>Color Scheme</Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+                  Choose a preset or pick custom colors below. Changes apply to the entire site.
+                </Typography>
+
+                <Grid container spacing={1.5} sx={{ mb: 3 }}>
+                  {PRESET_COLORS.map(preset => (
+                    <Grid item xs={6} sm={3} key={preset.label}>
+                      <Box
+                        onClick={() => applyPreset(preset)}
+                        sx={{
+                          p: 1.5,
+                          borderRadius: '12px',
+                          border: '2px solid',
+                          borderColor: selectedPreset === preset.label ? customPrimary : 'divider',
+                          cursor: 'pointer',
+                          transition: 'all 0.18s',
+                          '&:hover': { borderColor: preset.primary, transform: 'translateY(-2px)' },
+                          textAlign: 'center'
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center', mb: 1 }}>
+                          <Box sx={{ width: 20, height: 20, borderRadius: '6px', bgcolor: preset.primary }} />
+                          <Box sx={{ width: 20, height: 20, borderRadius: '6px', bgcolor: preset.secondary }} />
+                        </Box>
+                        <Typography variant="caption" sx={{ fontSize: '0.68rem', fontWeight: 700, display: 'block', lineHeight: 1.2 }}>
+                          {preset.label}
+                        </Typography>
+                        {selectedPreset === preset.label && (
+                          <CheckCircleIcon sx={{ fontSize: '0.75rem', color: preset.primary, mt: 0.5 }} />
+                        )}
+                      </Box>
+                    </Grid>
+                  ))}
+                </Grid>
+
+                {/* Custom Color Pickers */}
+                <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1.5 }}>Custom Colors</Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 2, borderRadius: '12px', border: '1px solid', borderColor: 'divider' }}>
+                      <Box sx={{ position: 'relative' }}>
+                        <Box
+                          sx={{
+                            width: 40, height: 40, borderRadius: '10px',
+                            bgcolor: customPrimary, cursor: 'pointer',
+                            boxShadow: `0 0 0 3px ${customPrimary}40`
+                          }}
+                        />
+                        <input
+                          type="color"
+                          value={customPrimary}
+                          onChange={e => { setCustomPrimary(e.target.value); setSelectedPreset(''); }}
+                          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
+                        />
+                      </Box>
+                      <Box>
+                        <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', fontSize: '0.68rem' }}>Primary Color</Typography>
+                        <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{customPrimary.toUpperCase()}</Typography>
+                      </Box>
+                    </Box>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 2, borderRadius: '12px', border: '1px solid', borderColor: 'divider' }}>
+                      <Box sx={{ position: 'relative' }}>
+                        <Box
+                          sx={{
+                            width: 40, height: 40, borderRadius: '10px',
+                            bgcolor: customSecondary, cursor: 'pointer',
+                            boxShadow: `0 0 0 3px ${customSecondary}40`
+                          }}
+                        />
+                        <input
+                          type="color"
+                          value={customSecondary}
+                          onChange={e => { setCustomSecondary(e.target.value); setSelectedPreset(''); }}
+                          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
+                        />
+                      </Box>
+                      <Box>
+                        <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', fontSize: '0.68rem' }}>Secondary Color</Typography>
+                        <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{customSecondary.toUpperCase()}</Typography>
+                      </Box>
+                    </Box>
+                  </Grid>
+                </Grid>
+              </Grid>
+
+              {/* Right Panel: Font & Radius & Preview */}
+              <Grid item xs={12} md={5}>
+                {/* Font */}
+                <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1 }}>Font Family</Typography>
+                <FormControl fullWidth size="small" sx={{ mb: 3 }}>
+                  <Select value={selectedFont} onChange={e => setSelectedFont(e.target.value)}>
+                    {FONT_OPTIONS.map(f => (
+                      <MenuItem key={f.value} value={f.value} sx={{ fontFamily: f.value }}>
+                        {f.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
+                {/* Border Radius */}
+                <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1 }}>
+                  Border Radius — <span style={{ color: customPrimary, fontFamily: 'monospace' }}>{radiusValue}px</span>
+                </Typography>
+                <Box sx={{ px: 1, mb: 3 }}>
+                  <Slider
+                    value={radiusValue}
+                    onChange={(_, v) => setRadiusValue(v)}
+                    min={0} max={28} step={2}
+                    marks={[{ value: 0, label: 'Sharp' }, { value: 14, label: 'Default' }, { value: 28, label: 'Round' }]}
+                    sx={{ color: customPrimary }}
+                  />
+                </Box>
+
+                {/* Live Preview Card */}
+                <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1.5 }}>Live Preview</Typography>
+                <Box sx={{
+                  p: 2.5, borderRadius: `${radiusValue}px`, border: '2px solid', borderColor: customPrimary,
+                  background: `linear-gradient(135deg, ${customPrimary}08, ${customSecondary}08)`,
+                  fontFamily: selectedFont
+                }}>
+                  <Box sx={{ display: 'flex', gap: 1, mb: 1.5, flexWrap: 'wrap' }}>
+                    <Box sx={{
+                      px: 2, py: 0.7, borderRadius: `${Math.max(radiusValue - 4, 4)}px`,
+                      background: `linear-gradient(135deg, ${customPrimary}, ${customSecondary})`,
+                      color: '#fff', fontSize: '0.8rem', fontWeight: 700, fontFamily: selectedFont
+                    }}>
+                      Primary Button
+                    </Box>
+                    <Box sx={{
+                      px: 2, py: 0.7, borderRadius: `${Math.max(radiusValue - 4, 4)}px`,
+                      border: `2px solid ${customPrimary}`, color: customPrimary,
+                      fontSize: '0.8rem', fontWeight: 700, fontFamily: selectedFont
+                    }}>
+                      Outlined
+                    </Box>
+                  </Box>
+                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                    {['Active', 'Pending', 'Expired'].map((label, i) => (
+                      <Box key={label} sx={{
+                        px: 1.2, py: 0.3, borderRadius: `${Math.max(radiusValue - 6, 4)}px`,
+                        bgcolor: [customPrimary, `${customPrimary}40`, '#94A3B820'][i],
+                        color: i === 0 ? '#fff' : customPrimary,
+                        fontSize: '0.7rem', fontWeight: 700, fontFamily: selectedFont
+                      }}>
+                        {label}
+                      </Box>
+                    ))}
+                  </Box>
+                  <Typography variant="caption" sx={{ display: 'block', mt: 1.5, color: 'text.secondary', fontFamily: selectedFont }}>
+                    College Data Bridge — MOU Management System
                   </Typography>
                 </Box>
 
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2.5 }}>
-                  The system checks active MOUs daily at midnight and triggers alerts for assigned users.
-                </Typography>
-
-                <FormControlLabel
-                  control={<Switch checked={emailAlerts} onChange={(e) => setEmailAlerts(e.target.checked)} color="primary" />}
-                  label={<Typography variant="body2" sx={{ fontWeight: 700 }}>Send Email Reminders to Owners</Typography>}
-                  sx={{ mb: 1, display: 'block' }}
-                />
-
-                <FormControlLabel
-                  control={<Switch checked={inAppAlerts} onChange={(e) => setInAppAlerts(e.target.checked)} color="primary" />}
-                  label={<Typography variant="body2" sx={{ fontWeight: 700 }}>In-App Notifications Bar Alerts</Typography>}
-                  sx={{ mb: 2.5, display: 'block' }}
-                />
-
-                <Divider sx={{ my: 2 }} />
-
-                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: 'uppercase', display: 'block', mb: 1.5 }}>
-                  Reminder Intervals
-                </Typography>
-
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  <FormControlLabel
-                    control={<Switch checked={reminder30Days} onChange={(e) => setReminder30Days(e.target.checked)} size="small" />}
-                    label={<Typography variant="body2">30 Days Before Expiry (Warning)</Typography>}
-                  />
-                  <FormControlLabel
-                    control={<Switch checked={reminder15Days} onChange={(e) => setReminder15Days(e.target.checked)} size="small" />}
-                    label={<Typography variant="body2">15 Days Before Expiry (Urgent)</Typography>}
-                  />
-                  <FormControlLabel
-                    control={<Switch checked={reminder7Days} onChange={(e) => setReminder7Days(e.target.checked)} size="small" />}
-                    label={<Typography variant="body2">7 Days Before Expiry (Critical)</Typography>}
-                  />
-                  <FormControlLabel
-                    control={<Switch checked={reminder1Day} onChange={(e) => setReminder1Day(e.target.checked)} size="small" />}
-                    label={<Typography variant="body2">1 Day Before Expiry (Final Alert)</Typography>}
-                  />
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-
-          {/* Theme & Server Storage Config */}
-          <Grid item xs={12} md={6}>
-            <Card sx={{ borderRadius: '20px', border: '1px solid', borderColor: 'divider', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-              <CardContent sx={{ p: 3 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                  <PaletteIcon sx={{ color: 'primary.main' }} />
-                  <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
-                    Theme & Visual Appearance
-                  </Typography>
-                </Box>
-
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, borderRadius: '14px', bgcolor: 'action.hover', mb: 3 }}>
+                {/* Dark Mode Toggle */}
+                <Box sx={{
+                  mt: 2.5, p: 2, borderRadius: '12px', bgcolor: 'action.hover',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                }}>
                   <Box>
                     <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Theme Mode</Typography>
                     <Typography variant="caption" color="text.secondary">Currently {mode.toUpperCase()} mode</Typography>
                   </Box>
-                  <Button variant="outlined" onClick={toggleTheme} sx={{ borderRadius: '10px', fontWeight: 700 }}>
-                    Toggle Mode
+                  <Button variant="outlined" onClick={toggleTheme} size="small" sx={{ borderRadius: '10px', fontWeight: 700 }}>
+                    Toggle {mode === 'light' ? '🌙 Dark' : '☀️ Light'}
                   </Button>
                 </Box>
+              </Grid>
 
-                <Divider sx={{ my: 2 }} />
-
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                  <StorageIcon sx={{ color: 'primary.main' }} />
-                  <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
-                    Server Storage Alert Threshold
-                  </Typography>
+              {/* Action Buttons */}
+              <Grid item xs={12}>
+                <Divider sx={{ mb: 2.5 }} />
+                <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
+                  <Button
+                    variant="outlined"
+                    startIcon={<RestartAltIcon />}
+                    onClick={handleResetAppearance}
+                    sx={{ borderRadius: '12px', fontWeight: 700 }}
+                  >
+                    Reset to Defaults
+                  </Button>
+                  <Button
+                    variant="contained"
+                    startIcon={<CheckCircleIcon />}
+                    onClick={handleSaveAppearance}
+                    sx={{
+                      borderRadius: '12px', fontWeight: 700,
+                      background: `linear-gradient(135deg, ${customPrimary}, ${customSecondary})`
+                    }}
+                  >
+                    Apply Appearance
+                  </Button>
                 </Box>
+              </Grid>
+            </Grid>
+          </TabPanel>
 
-                <TextField
-                  fullWidth
-                  type="number"
-                  label="Disk Storage Warning Threshold (%)"
-                  value={storageThreshold}
-                  onChange={(e) => setStorageThreshold(e.target.value)}
-                  helperText="Alert super admin when disk usage exceeds this percentage."
-                  sx={{ mb: 2 }}
-                />
-              </CardContent>
+          {/* ════════════════════════ TAB 2: MASTER DATA CONFIG ════════════════════════ */}
+          <TabPanel value={activeTab} index={1}>
+            <MasterDataTab />
+          </TabPanel>
 
-              <Box sx={{ p: 3, pt: 0 }}>
-                <Button
-                  fullWidth
-                  type="submit"
-                  variant="contained"
-                  startIcon={<CheckCircleIcon />}
-                  sx={{
-                    py: 1.2,
-                    borderRadius: '12px',
-                    fontWeight: 700,
-                    background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)'
-                  }}
-                >
-                  Save System Preferences
-                </Button>
-              </Box>
-            </Card>
-          </Grid>
-        </Grid>
-      </Box>
+          {/* ════════════════════════ TAB 3: NOTIFICATIONS ════════════════════════ */}
+          <TabPanel value={activeTab} index={2}>
+            <Grid container spacing={3}>
+              <Grid item xs={12} md={6}>
+                <Card sx={{ borderRadius: '16px', border: '1px solid', borderColor: 'divider', boxShadow: 'none' }}>
+                  <CardContent sx={{ p: 3 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                      <NotificationsActiveIcon sx={{ color: 'primary.main' }} />
+                      <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>Alert Channels</Typography>
+                    </Box>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2.5 }}>
+                      The system checks active MOUs daily at midnight and triggers alerts for assigned users.
+                    </Typography>
+                    <FormControlLabel
+                      control={<Switch checked={emailAlerts} onChange={e => setEmailAlerts(e.target.checked)} color="primary" />}
+                      label={<Typography variant="body2" sx={{ fontWeight: 700 }}>Send Email Reminders to Owners</Typography>}
+                      sx={{ mb: 1, display: 'block' }}
+                    />
+                    <FormControlLabel
+                      control={<Switch checked={inAppAlerts} onChange={e => setInAppAlerts(e.target.checked)} color="primary" />}
+                      label={<Typography variant="body2" sx={{ fontWeight: 700 }}>In-App Notifications Bar Alerts</Typography>}
+                      sx={{ mb: 1, display: 'block' }}
+                    />
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <Card sx={{ borderRadius: '16px', border: '1px solid', borderColor: 'divider', boxShadow: 'none' }}>
+                  <CardContent sx={{ p: 3 }}>
+                    <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', color: 'text.secondary', display: 'block', mb: 2 }}>
+                      Reminder Intervals Before MOU Expiry
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                      {[
+                        { label: '30 Days Before (Warning)', state: reminder30Days, set: setReminder30Days, color: '#F59E0B' },
+                        { label: '15 Days Before (Urgent)', state: reminder15Days, set: setReminder15Days, color: '#F97316' },
+                        { label: '7 Days Before (Critical)', state: reminder7Days, set: setReminder7Days, color: '#EF4444' },
+                        { label: '1 Day Before (Final Alert)', state: reminder1Day, set: setReminder1Day, color: '#F43F5E' },
+                      ].map(({ label, state, set, color }) => (
+                        <Box key={label} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 1.5, borderRadius: '10px', border: '1px solid', borderColor: 'divider' }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: state ? color : '#94A3B8' }} />
+                            <Typography variant="body2" sx={{ fontWeight: 600 }}>{label}</Typography>
+                          </Box>
+                          <Switch size="small" checked={state} onChange={e => set(e.target.checked)} sx={{ '& .MuiSwitch-thumb': { bgcolor: state ? color : undefined } }} />
+                        </Box>
+                      ))}
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              <Grid item xs={12}>
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <Button
+                    variant="contained"
+                    startIcon={<CheckCircleIcon />}
+                    onClick={handleSaveNotifications}
+                    sx={{ borderRadius: '12px', fontWeight: 700, background: 'linear-gradient(135deg, #4F46E5, #7C3AED)' }}
+                  >
+                    Save Notification Preferences
+                  </Button>
+                </Box>
+              </Grid>
+            </Grid>
+          </TabPanel>
+
+          {/* ════════════════════════ TAB 4: STORAGE ════════════════════════ */}
+          <TabPanel value={activeTab} index={3}>
+            <Grid container spacing={3} justifyContent="center">
+              <Grid item xs={12} md={7}>
+                <Card sx={{ borderRadius: '16px', border: '1px solid', borderColor: 'divider', boxShadow: 'none' }}>
+                  <CardContent sx={{ p: 3 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                      <StorageIcon sx={{ color: 'primary.main' }} />
+                      <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>Server Storage Alert Threshold</Typography>
+                    </Box>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                      Alert the super admin when disk usage exceeds this percentage. The system checks storage at regular intervals.
+                    </Typography>
+
+                    <Box sx={{ mb: 3 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                        <Typography variant="caption" sx={{ fontWeight: 700 }}>Warning Threshold</Typography>
+                        <Typography variant="caption" sx={{ fontWeight: 800, color: storageThreshold > 90 ? 'error.main' : storageThreshold > 75 ? 'warning.main' : 'success.main' }}>
+                          {storageThreshold}%
+                        </Typography>
+                      </Box>
+                      <Slider
+                        value={storageThreshold}
+                        onChange={(_, v) => setStorageThreshold(v)}
+                        min={50} max={99} step={5}
+                        marks={[
+                          { value: 60, label: '60%' },
+                          { value: 75, label: '75%' },
+                          { value: 85, label: '85%' },
+                          { value: 95, label: '95%' },
+                        ]}
+                        sx={{
+                          color: storageThreshold > 90 ? '#F43F5E' : storageThreshold > 75 ? '#F59E0B' : '#10B981'
+                        }}
+                      />
+                    </Box>
+
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Disk Storage Warning Threshold (%)"
+                      value={storageThreshold}
+                      onChange={e => setStorageThreshold(Math.min(99, Math.max(1, parseInt(e.target.value) || 0)))}
+                      inputProps={{ min: 1, max: 99 }}
+                      helperText="Recommended: 85%. Alert fires when storage exceeds this value."
+                      sx={{ mb: 2 }}
+                    />
+
+                    {/* Threshold Meaning */}
+                    <Box sx={{ p: 2, borderRadius: '12px', bgcolor: 'action.hover' }}>
+                      <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', mb: 1 }}>Alert Levels</Typography>
+                      {[
+                        { range: '< 75%', label: 'Safe — No alert triggered', color: '#10B981' },
+                        { range: '75–89%', label: 'Warning — Yellow alert banner', color: '#F59E0B' },
+                        { range: '≥ 90%', label: 'Critical — Red alert, action required', color: '#F43F5E' },
+                      ].map(({ range, label, color }) => (
+                        <Box key={range} sx={{ display: 'flex', gap: 1.5, mb: 0.5, alignItems: 'center' }}>
+                          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: color, flexShrink: 0 }} />
+                          <Typography variant="caption">
+                            <strong style={{ color }}>{range}</strong> — {label}
+                          </Typography>
+                        </Box>
+                      ))}
+                    </Box>
+
+                    <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
+                      <Button
+                        variant="contained"
+                        startIcon={<CheckCircleIcon />}
+                        onClick={handleSaveStorage}
+                        sx={{ borderRadius: '12px', fontWeight: 700, background: 'linear-gradient(135deg, #4F46E5, #7C3AED)' }}
+                      >
+                        Save Storage Settings
+                      </Button>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
+          </TabPanel>
+        </Box>
+      </Card>
     </Box>
   );
 };

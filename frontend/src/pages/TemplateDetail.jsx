@@ -1,0 +1,538 @@
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import {
+  Box, Card, Typography, Grid, Button, TextField, MenuItem, Select,
+  FormControl, InputLabel, Alert, CircularProgress, Chip, Table, TableBody,
+  TableCell, TableContainer, TableHead, TableRow, Paper, Avatar, Divider,
+  Dialog, DialogTitle, DialogContent, DialogActions, Link, IconButton, Breadcrumbs
+} from '@mui/material';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import ArchiveIcon from '@mui/icons-material/Archive';
+import DateRangeIcon from '@mui/icons-material/DateRange';
+import InfoIcon from '@mui/icons-material/Info';
+import TimelineIcon from '@mui/icons-material/Timeline';
+import FolderIcon from '@mui/icons-material/Folder';
+import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
+import ExtensionIcon from '@mui/icons-material/Extension';
+import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
+
+import {
+  getTemplateCollection, uploadTemplateDocument, archiveTemplateDocument, getMasterDocTypes
+} from '../services/templateApi';
+import api from '../services/api';
+import PDFPreviewModal from '../components/PDFPreviewModal';
+
+const TemplateDetail = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [collection, setCollection] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [formError, setFormError] = useState(null);
+  const [docTypes, setDocTypes] = useState([]);
+  const [activities, setActivities] = useState([]);
+
+  // Upload fields
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [file, setFile] = useState(null);
+  const [docName, setDocName] = useState('');
+  const [selDocType, setSelDocType] = useState('');
+  const [version, setVersion] = useState('1.0');
+  const [effectiveDate, setEffectiveDate] = useState('');
+  const [expiryDate, setExpiryDate] = useState('');
+  const [revisionDate, setRevisionDate] = useState('');
+  const [remarks, setRemarks] = useState('');
+  const [uploading, setUploading] = useState(false);
+  
+  // Drag & Drop Highlight
+  const [isDragActive, setIsDragActive] = useState(false);
+
+  // Preview Modal
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewFileUrl, setPreviewFileUrl] = useState('');
+  const [previewDocId, setPreviewDocId] = useState(null);
+  const [previewTitle, setPreviewTitle] = useState('');
+
+  const fetchCollectionDetails = async () => {
+    setLoading(true);
+    try {
+      const data = await getTemplateCollection(id);
+      setCollection(data);
+      
+      // Load activity logs filtered by template
+      const logs = await api.get('/api/activity-logs/');
+      const relatedLogs = logs.data.filter(l => 
+        l.module === 'Templates' && 
+        (l.action.includes(data.template_name) || l.action.includes(String(id)))
+      );
+      setActivities(relatedLogs);
+    } catch (err) {
+      console.error(err);
+      setError('Template collection not found or permission denied.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCollectionDetails();
+    getMasterDocTypes().then(types => setDocTypes(types.filter(t => t.is_active)));
+  }, [id]);
+
+  const handleOpenUpload = (prefillVersion = '1.0') => {
+    setFile(null);
+    setDocName('');
+    setSelDocType('');
+    setVersion(prefillVersion);
+    setEffectiveDate('');
+    setExpiryDate('');
+    setRevisionDate('');
+    setRemarks('');
+    setFormError(null);
+    setUploadOpen(true);
+  };
+
+  // Drag & Drop Handlers
+  const handleDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setIsDragActive(true);
+    } else if (e.type === "dragleave") {
+      setIsDragActive(false);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const droppedFile = e.dataTransfer.files[0];
+      if (droppedFile.type !== "application/pdf") {
+        alert("Only PDF files are supported!");
+        return;
+      }
+      setFile(droppedFile);
+      setDocName(droppedFile.name.replace(/\.[^/.]+$/, ""));
+    }
+  };
+
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      const selectedFile = e.target.files[0];
+      if (selectedFile.type !== "application/pdf") {
+        alert("Only PDF files are supported!");
+        return;
+      }
+      setFile(selectedFile);
+      setDocName(selectedFile.name.replace(/\.[^/.]+$/, ""));
+    }
+  };
+
+  const handleUploadSubmit = async () => {
+    if (!file || !docName || !selDocType) {
+      setFormError('Please upload a PDF file, name the document, and choose the document type.');
+      return;
+    }
+    setUploading(true);
+    setFormError(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('document_name', docName);
+      formData.append('document_type_id', selDocType);
+      formData.append('version', version);
+      if (effectiveDate) formData.append('effective_date', effectiveDate);
+      if (expiryDate) formData.append('expiry_date', expiryDate);
+      if (revisionDate) formData.append('revision_date', revisionDate);
+      formData.append('remarks', remarks);
+
+      await uploadTemplateDocument(id, formData);
+      setUploadOpen(false);
+      fetchCollectionDetails();
+    } catch (err) {
+      console.error(err);
+      setFormError('Failed to upload PDF template document.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleArchive = async (docId, docName) => {
+    if (window.confirm(`Archive document template '${docName}'? Previous versions should not be deleted, but archiving makes them inactive.`)) {
+      try {
+        await archiveTemplateDocument(docId);
+        fetchCollectionDetails();
+      } catch (err) {
+        console.error(err);
+        setError('Failed to archive document.');
+      }
+    }
+  };
+
+  const handlePreview = (doc) => {
+    // PDF document file URL
+    setPreviewFileUrl(doc.file_path);
+    setPreviewDocId(doc.id);
+    setPreviewTitle(`${doc.document_name} (v${doc.version})`);
+    setPreviewOpen(true);
+  };
+
+  if (loading) return (
+    <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress /></Box>
+  );
+
+  if (error || !collection) return (
+    <Box sx={{ p: 4, textAlign: 'center' }}>
+      <Alert severity="error" sx={{ mb: 2 }}>{error || 'Template Library not found.'}</Alert>
+      <Button startIcon={<ArrowBackIcon />} onClick={() => navigate('/templates')}>
+        Back to Templates
+      </Button>
+    </Box>
+  );
+
+  return (
+    <Box sx={{ flexGrow: 1 }} className="animate-fade-slide-up">
+      {/* Breadcrumbs */}
+      <Breadcrumbs separator={<KeyboardArrowRightIcon sx={{ fontSize: 16 }} />} sx={{ mb: 2 }}>
+        <Link underline="hover" color="inherit" href="#" onClick={() => navigate('/templates')} sx={{ fontWeight: 600 }}>
+          Template Library
+        </Link>
+        <Typography color="text.primary" sx={{ fontWeight: 800 }}>{collection.template_name}</Typography>
+      </Breadcrumbs>
+
+      {/* Header Info */}
+      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
+        <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
+          <Button startIcon={<ArrowBackIcon />} onClick={() => navigate('/templates')} sx={{ color: 'text.secondary', fontWeight: 700 }} />
+          <Box>
+            <Typography variant="h4" sx={{ fontWeight: 900 }}>{collection.template_name}</Typography>
+            <Typography variant="caption" color="text.secondary">
+              Collection Workspace • Category: {collection.category_name}
+            </Typography>
+          </Box>
+        </Box>
+        <Button
+          variant="contained"
+          startIcon={<CloudUploadIcon />}
+          onClick={() => handleOpenUpload()}
+          sx={{ borderRadius: '24px', px: 3, fontWeight: 700 }}
+        >
+          Upload PDF File
+        </Button>
+      </Box>
+
+      <Grid container spacing={3.5}>
+        {/* Left Column: Documents list & upload trigger */}
+        <Grid item xs={12} md={8}>
+          <Card sx={{ borderRadius: '20px', border: '1px solid', borderColor: 'divider', boxShadow: 'none', mb: 3 }}>
+            <Box sx={{ p: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid', borderColor: 'divider' }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>PDF Document Repository</Typography>
+              <Chip label={`${collection.documents?.length || 0} files`} size="small" />
+            </Box>
+            
+            <TableContainer component={Paper} sx={{ boxShadow: 'none' }}>
+              <Table>
+                <TableHead sx={{ bgcolor: 'action.hover' }}>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 800 }}>Document Name</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>Type</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>Version</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>Status</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>Uploaded By / Date</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 800 }}>Action</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {(!collection.documents || collection.documents.length === 0) ? (
+                    <TableRow>
+                      <TableCell colSpan={6} align="center" sx={{ py: 8 }}>
+                        <Typography color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+                          No PDF templates uploaded in this collection.
+                        </Typography>
+                        <Button startIcon={<CloudUploadIcon />} variant="outlined" onClick={() => handleOpenUpload()} sx={{ borderRadius: '18px' }}>
+                          Upload PDF Document
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    collection.documents.map((doc) => (
+                      <TableRow key={doc.id} hover>
+                        <TableCell>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                            <Avatar sx={{ bgcolor: 'rgba(239,68,68,0.08)', color: 'error.main', width: 32, height: 32 }}>
+                              <DescriptionIcon sx={{ fontSize: 18 }} />
+                            </Avatar>
+                            <Box>
+                              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                                {doc.document_name}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                Size: {(doc.file_path && doc.file_path.includes('bytes')) ? 'Unknown' : 'PDF'}
+                              </Typography>
+                            </Box>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Chip label={doc.document_type_name} size="small" color="primary" variant="outlined" sx={{ fontWeight: 700 }} />
+                        </TableCell>
+                        <TableCell sx={{ fontWeight: 800 }}>v{doc.version}</TableCell>
+                        <TableCell>
+                          <Chip
+                            label={doc.status}
+                            size="small"
+                            color={doc.status === 'Active' ? 'success' : doc.status === 'Draft' ? 'warning' : 'default'}
+                            sx={{ fontWeight: 800 }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="caption" sx={{ fontWeight: 600, display: 'block' }}>
+                            {doc.uploaded_by_name || 'Admin'}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {new Date(doc.uploaded_at).toLocaleDateString()}
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="right">
+                          <IconButton size="small" onClick={() => handlePreview(doc)} sx={{ color: 'primary.main', mr: 0.5 }}>
+                            <VisibilityIcon fontSize="small" />
+                          </IconButton>
+                          {doc.status !== 'Archived' && (
+                            <IconButton size="small" onClick={() => handleArchive(doc.id, doc.document_name)} sx={{ color: 'error.main' }}>
+                              <ArchiveIcon fontSize="small" />
+                            </IconButton>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Card>
+        </Grid>
+
+        {/* Right Column: Information & Audit Activity logs */}
+        <Grid item xs={12} md={4}>
+          {/* Metadata Card */}
+          <Card sx={{ p: 3, mb: 3.5, borderRadius: '20px', border: '1px solid', borderColor: 'divider', boxShadow: 'none' }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2 }}>Template Parameters</Typography>
+            
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, display: 'block' }}>Description</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>{collection.description || 'No description provided.'}</Typography>
+            </Box>
+
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, display: 'block' }}>Stream Category</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 800 }}>{collection.department_category_name}</Typography>
+            </Box>
+
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, display: 'block' }}>Assigned Department</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 800 }}>{collection.department_name}</Typography>
+            </Box>
+
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, display: 'block' }}>Organization Type</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 800 }}>{collection.organization_type_name}</Typography>
+            </Box>
+
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, display: 'block' }}>Collaboration Type</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 800 }}>{collection.collaboration_type_name}</Typography>
+            </Box>
+
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, display: 'block' }}>Created By</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 700 }}>{collection.created_by_name} ({new Date(collection.created_at).toLocaleDateString()})</Typography>
+            </Box>
+
+            {collection.tags_details && collection.tags_details.length > 0 && (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, display: 'block', mb: 1 }}>Tags</Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                  {collection.tags_details.map(t => <Chip key={t.id} label={t.name} size="small" />)}
+                </Box>
+              </Box>
+            )}
+          </Card>
+
+          {/* Activity Timeline Card */}
+          <Card sx={{ p: 3, borderRadius: '20px', border: '1px solid', borderColor: 'divider', boxShadow: 'none' }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <TimelineIcon /> Template Activity Logs
+            </Typography>
+            <Box sx={{ position: 'relative', pl: 1 }}>
+              {activities.length === 0 ? (
+                <Typography variant="caption" color="text.secondary">No template activity recorded yet.</Typography>
+              ) : (
+                activities.slice(0, 8).map((log, idx) => (
+                  <Box key={log.id} sx={{ position: 'relative', mb: 2, pl: 3, borderLeft: idx < activities.length - 1 ? '2px solid' : 'none', borderLeftColor: 'divider' }}>
+                    <Box sx={{
+                      position: 'absolute', left: -5, top: 2, width: 8, height: 8,
+                      borderRadius: '50%', bgcolor: 'primary.main'
+                    }} />
+                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block' }}>
+                      {new Date(log.timestamp).toLocaleString()}
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontSize: '0.82rem', fontWeight: 600 }}>
+                      {log.action}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      By: {log.user_email}
+                    </Typography>
+                  </Box>
+                ))
+              )}
+            </Box>
+          </Card>
+        </Grid>
+      </Grid>
+
+      {/* Guided Wizard dialog: Upload PDF Template file */}
+      <Dialog open={uploadOpen} onClose={() => setUploadOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: '24px' } }}>
+        <DialogTitle sx={{ fontWeight: 800 }}>Upload PDF Template File</DialogTitle>
+        <DialogContent dividers>
+          {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
+          <Grid container spacing={2.5}>
+            {/* Drag & Drop File Upload Field */}
+            <Grid item xs={12}>
+              <Box
+                onDragEnter={handleDrag}
+                onDragOver={handleDrag}
+                onDragLeave={handleDrag}
+                onDrop={handleDrop}
+                sx={{
+                  border: '2px dashed',
+                  borderColor: isDragActive ? 'primary.main' : 'divider',
+                  bgcolor: isDragActive ? 'rgba(79,70,229,0.04)' : 'action.hover',
+                  borderRadius: '16px',
+                  p: 4.5,
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  '&:hover': {
+                    borderColor: 'primary.main',
+                    bgcolor: 'rgba(79,70,229,0.02)'
+                  }
+                }}
+                onClick={() => document.getElementById('template-file-input').click()}
+              >
+                <input
+                  id="template-file-input"
+                  type="file"
+                  accept="application/pdf"
+                  style={{ display: 'none' }}
+                  onChange={handleFileChange}
+                />
+                <CloudUploadIcon sx={{ fontSize: 44, color: 'primary.main', mb: 1 }} />
+                <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                  {file ? file.name : "Drag & Drop PDF or Click to Browse"}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                  Supports PDF files up to 25MB.
+                </Typography>
+              </Box>
+            </Grid>
+
+            {/* Document metadata fields */}
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                required
+                label="Document Display Name"
+                placeholder="e.g. Draft Version / Legal Approved"
+                value={docName}
+                onChange={(e) => setDocName(e.target.value)}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth required>
+                <InputLabel>Document Type</InputLabel>
+                <Select value={selDocType} label="Document Type" onChange={(e) => setSelDocType(e.target.value)}>
+                  {docTypes.map(t => <MenuItem key={t.id} value={t.id}>{t.name}</MenuItem>)}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Version Number"
+                placeholder="e.g. 1.0 or 2.1"
+                value={version}
+                onChange={(e) => setVersion(e.target.value)}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                type="date"
+                label="Effective Date"
+                value={effectiveDate}
+                onChange={(e) => setEffectiveDate(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                type="date"
+                label="Expiry Date"
+                value={expiryDate}
+                onChange={(e) => setExpiryDate(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                type="date"
+                label="Revision Date"
+                value={revisionDate}
+                onChange={(e) => setRevisionDate(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                multiline
+                rows={2}
+                label="Remarks"
+                placeholder="Optional version comments..."
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions sx={{ p: 2.5 }}>
+          <Button onClick={() => setUploadOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleUploadSubmit}
+            disabled={uploading}
+            sx={{ borderRadius: '12px', fontWeight: 700 }}
+          >
+            {uploading ? 'Uploading PDF...' : 'Upload Document'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* PDF Inline Viewer modal */}
+      <PDFPreviewModal
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        fileUrl={previewFileUrl}
+        docId={previewDocId}
+        title={previewTitle}
+      />
+    </Box>
+  );
+};
+
+export default TemplateDetail;

@@ -7,13 +7,23 @@ const api = axios.create({
   },
 });
 
-// Request Interceptor: Attach access token to headers
+// Request Interceptor: Attach access token and custom time header to requests
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('access_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Attach simulated clock time if enabled
+    const isCustom = localStorage.getItem('site_time_is_custom') === 'true';
+    if (isCustom) {
+      const customTime = localStorage.getItem('site_time_custom_val');
+      if (customTime) {
+        config.headers['X-Custom-Time'] = customTime;
+      }
+    }
+    
     return config;
   },
   (error) => Promise.reject(error)

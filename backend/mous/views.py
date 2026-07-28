@@ -1,14 +1,19 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from django.shortcuts import get_object_or_404
 from rest_framework import status, generics
 from rest_framework.permissions import IsAuthenticated
 from django.db.models import Q, Count
+from django.db import transaction
+from django.db import IntegrityError
+from django.db.models.deletion import ProtectedError
 from datetime import date, timedelta
 
-from .models import MOUTemplate, MOU, MOUDocument, MOURenewal
+from .models import MOUTemplate, MOU, MOUDocument, MOURenewal, MOUShare, DepartmentSubmission
 from .serializers import MOUTemplateSerializer, MOUSerializer, MOUDocumentSerializer
 from activity_logs.models import ActivityLog
 from notifications.models import Notification
+from notifications.utils import create_notification, notify_admins
 from files.models import File
 from folders.models import Folder
 
@@ -60,6 +65,8 @@ class MOUListCreateView(APIView):
         status_filter = request.query_params.get('status')
         type_filter = request.query_params.get('type')
         dept_filter = request.query_params.get('department')
+        dept_name_filter = request.query_params.get('department_name')
+        dept_category_filter = request.query_params.get('department_category')
         search_query = request.query_params.get('q', '').strip()
 
         if status_filter:
@@ -68,6 +75,15 @@ class MOUListCreateView(APIView):
             qs = qs.filter(mou_type_id=type_filter)
         if dept_filter:
             qs = qs.filter(department_id=dept_filter)
+        if dept_name_filter:
+            qs = qs.filter(department_name__iexact=dept_name_filter)
+        if dept_category_filter:
+            if dept_category_filter == 'Aided':
+                qs = qs.filter(department_name__endswith='(Aided)')
+            elif dept_category_filter == 'Self-Financed (SFS)':
+                qs = qs.filter(department_name__endswith='(SFS)')
+            elif dept_category_filter in ['Administrative Units', 'Other / Administrative Units']:
+                qs = qs.exclude(department_name__endswith='(Aided)').exclude(department_name__endswith='(SFS)')
         if search_query:
             qs = qs.filter(
                 Q(title__icontains=search_query) |
@@ -123,6 +139,11 @@ class MOUDetailView(APIView):
         mou = self.get_object(pk)
         if not mou:
             return Response({"detail": "MOU not found."}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Update share status to Viewed if viewed by department user
+        if request.user.department:
+            MOUShare.objects.filter(mou=mou, department__name=request.user.department, status='Shared').update(status='Viewed')
+            
         serializer = MOUSerializer(mou, context={'request': request})
         return Response(serializer.data)
 
@@ -301,3 +322,629 @@ class MOUReportsView(APIView):
             "expiring_7_days": expiring_7,
             "expired_total": expired_count,
         })
+
+class MOUShareView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, pk):
+        shares = MOUShare.objects.filter(mou_id=pk)
+        data = []
+        for s in shares:
+            data.append({
+                'id': s.id,
+                'department_id': s.department_id,
+                'department_name': s.department.name if s.department else None,
+                'user_id': s.user_id,
+                'user_email': s.user.email if s.user else None,
+                'permission': s.permission,
+                'status': s.status,
+                'shared_by': s.shared_by.name if s.shared_by else None,
+                'shared_at': s.shared_at
+            })
+        return Response(data)
+
+    def post(self, request, pk):
+        mou = get_object_or_404(MOU, id=pk)
+        department_name = request.data.get('department_name')
+        user_email = request.data.get('user_email')
+        permission = request.data.get('permission', 'View Only')
+        
+        # Resolve department folder
+        dept_folder = None
+        if department_name:
+            from folders.models import Folder
+            from services import drive_service
+            dept_folder, _ = Folder.objects.get_or_create(
+                name=department_name,
+                parent=None,
+                defaults={'created_by': request.user}
+            )
+            if not dept_folder.google_folder_id:
+                google_id = drive_service.create_folder(dept_folder.name, None)
+                dept_folder.google_folder_id = google_id
+                dept_folder.save(update_fields=['google_folder_id'])
+        
+        target_user = None
+        if user_email:
+            target_user = get_object_or_404(User, email=user_email)
+            
+        with transaction.atomic():
+            share, created = MOUShare.objects.update_or_create(
+                mou=mou,
+                department=dept_folder,
+                user=target_user,
+                defaults={
+                    'shared_by': request.user,
+                    'permission': permission,
+                    'status': 'Shared'
+                }
+            )
+            
+            # Create "Department Submission" folder under MOU folder
+            if mou.department:
+                from folders.models import Folder
+                from services import drive_service
+                sub_folder_name = "Department Submission"
+                sub_folder, sf_created = Folder.objects.get_or_create(
+                    name=sub_folder_name,
+                    parent=mou.department,
+                    defaults={'created_by': request.user}
+                )
+                if sf_created or not sub_folder.google_folder_id:
+                    try:
+                        google_id = drive_service.create_folder(sub_folder.name, mou.department.google_folder_id)
+                        sub_folder.google_folder_id = google_id
+                        sub_folder.save(update_fields=['google_folder_id'])
+                    except Exception:
+                        pass
+        
+        # Log & notify
+        log_activity(request.user, f"Shared MOU '{mou.title}' with {department_name or user_email} ({permission})")
+        if target_user:
+            send_notification(target_user, "MOU Shared With You", f"MOU '{mou.title}' has been shared with you with permission '{permission}'.")
+            
+        return Response({"detail": "MOU shared successfully."}, status=status.HTTP_201_CREATED)
+
+class MOUShareDeleteView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def delete(self, request, pk):
+        share = get_object_or_404(MOUShare, id=pk)
+        mou_title = share.mou.title
+        dept_or_user = share.department.name if share.department else (share.user.email if share.user else "Unknown")
+        
+        share.delete()
+        log_activity(request.user, f"Revoked MOU share for '{mou_title}' from {dept_or_user}")
+        return Response({"detail": "Share revoked successfully."}, status=status.HTTP_204_NO_CONTENT)
+
+class DepartmentSubmissionView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        is_admin = request.user.role and request.user.role.name in ["Super Admin", "Admin", "Lawyer / MOU Administrator"]
+        if is_admin:
+            subs = DepartmentSubmission.objects.all().order_by('-uploaded_at')
+        else:
+            if not request.user.department:
+                return Response([])
+            subs = DepartmentSubmission.objects.filter(department__name=request.user.department).order_by('-uploaded_at')
+            
+        data = []
+        for s in subs:
+            data.append({
+                'id': s.id,
+                'mou_id': s.mou_id,
+                'mou_title': s.mou.title,
+                'mou_number': s.mou.mou_number,
+                'department_name': s.department.name if s.department else None,
+                'signed_file_id': s.signed_file_id,
+                'signed_file_name': s.signed_file.name if s.signed_file else None,
+                'signed_date': s.signed_date,
+                'mou_month': s.mou_month,
+                'mou_year': s.mou_year,
+                'summary': s.summary,
+                'purpose': s.purpose,
+                'benefits': s.benefits,
+                'remarks': s.remarks,
+                'uploaded_by': s.uploaded_by.name if s.uploaded_by else None,
+                'uploaded_at': s.uploaded_at,
+                'review_status': s.review_status,
+                'reviewer_comments': s.reviewer_comments
+            })
+        return Response(data)
+        
+    def post(self, request):
+        mou_id = request.data.get('mou_id')
+        uploaded_file = request.FILES.get('file')
+        signed_file_id = request.data.get('signed_file_id')
+        signed_date_str = request.data.get('signed_date')
+        mou_month = request.data.get('mou_month')
+        mou_year = request.data.get('mou_year')
+        summary = request.data.get('summary')
+        purpose = request.data.get('purpose')
+        benefits_raw = request.data.get('benefits', '[]')
+        remarks = request.data.get('remarks', '')
+        
+        # Parse benefits list
+        import json
+        if isinstance(benefits_raw, str):
+            try:
+                benefits = json.loads(benefits_raw)
+            except Exception:
+                benefits = [b.strip() for b in benefits_raw.split(',') if b.strip()]
+        else:
+            benefits = benefits_raw
+            
+        if not mou_id or (not uploaded_file and not signed_file_id) or not signed_date_str or not mou_month or not mou_year or not summary or not purpose:
+            return Response({"detail": "Missing required fields."}, status=status.HTTP_400_BAD_REQUEST)
+            
+        mou = get_object_or_404(MOU, id=mou_id)
+        signed_date = date.fromisoformat(signed_date_str)
+        
+        duration_months_raw = request.data.get('duration_months')
+        expiry_date_str = request.data.get('expiry_date')
+        
+        if duration_months_raw:
+            try:
+                mou.duration_months = int(duration_months_raw)
+            except (ValueError, TypeError):
+                pass
+                
+        if expiry_date_str:
+            try:
+                parsed_exp = date.fromisoformat(expiry_date_str)
+                mou.expiry_date = parsed_exp
+            except ValueError:
+                mou.expiry_date = mou.calculate_expiry(signed_date, mou.duration_months)
+        else:
+            mou.expiry_date = mou.calculate_expiry(signed_date, mou.duration_months)
+
+        # Validate that validity date is strictly after signed date
+        if mou.expiry_date and mou.expiry_date <= signed_date:
+            return Response(
+                {"detail": f"Validation Error: MOU Validity Expiry Date ({mou.expiry_date}) must be strictly after the Signed Date ({signed_date})."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        # Determine department folder
+        user_dept_name = request.user.department
+        dept_folder = None
+        if user_dept_name:
+            from folders.models import Folder
+            dept_folder = Folder.objects.filter(name=user_dept_name).first()
+            
+        with transaction.atomic():
+            # Retrieve or create "Department Submission" folder under MOU folder
+            submission_folder = None
+            if mou.department:
+                from folders.models import Folder
+                from services import drive_service
+                submission_folder, sf_created = Folder.objects.get_or_create(
+                    name="Department Submission",
+                    parent=mou.department,
+                    defaults={'created_by': request.user}
+                )
+                if sf_created or not submission_folder.google_folder_id:
+                    google_id = drive_service.create_folder(submission_folder.name, mou.department.google_folder_id if mou.department else None)
+                    submission_folder.google_folder_id = google_id
+                    submission_folder.save(update_fields=['google_folder_id'])
+            
+            signed_file = None
+            if uploaded_file:
+                import mimetypes
+                file_type, _ = mimetypes.guess_type(uploaded_file.name)
+                if not file_type:
+                    file_type = "application/octet-stream"
+                    
+                from files.models import File
+                signed_file = File.objects.create(
+                    name=uploaded_file.name,
+                    size=uploaded_file.size,
+                    file_type=file_type,
+                    folder=submission_folder or mou.department,
+                    uploaded_by=request.user
+                )
+                
+                # Upload directly to Google Drive under Department Submission folder
+                from services import drive_service
+                drive_metadata = drive_service.upload_file(
+                    uploaded_file,
+                    uploaded_file.name,
+                    file_type,
+                    submission_folder.google_folder_id if submission_folder else None
+                )
+                signed_file.google_file_id = drive_metadata['id']
+                signed_file.mime_type = drive_metadata['mimeType']
+                signed_file.file_size = drive_metadata['size']
+                signed_file.web_view_link = drive_metadata['webViewLink']
+                signed_file.web_content_link = drive_metadata['webContentLink']
+                signed_file.save()
+            else:
+                from files.models import File
+                signed_file = get_object_or_404(File, id=signed_file_id)
+                
+            submission, created = DepartmentSubmission.objects.update_or_create(
+                mou=mou,
+                department=dept_folder,
+                defaults={
+                    'signed_file': signed_file,
+                    'signed_date': signed_date,
+                    'mou_month': mou_month,
+                    'mou_year': int(mou_year),
+                    'summary': summary,
+                    'purpose': purpose,
+                    'benefits': benefits,
+                    'remarks': remarks,
+                    'uploaded_by': request.user,
+                    'review_status': 'Pending Verification'
+                }
+            )
+            
+            # Update MOU properties
+            mou.signed_mou = signed_file
+            mou.signed_date = signed_date
+            mou.status = 'Pending Verification'
+            mou.save(update_fields=['signed_mou', 'signed_date', 'duration_months', 'expiry_date', 'status'])
+            
+            # Create document link
+            mou_doc = MOUDocument.objects.create(
+                mou=mou,
+                document_type='signed',
+                file=signed_file,
+                uploaded_by=request.user
+            )
+            
+            # Support custom creation date/time
+            custom_created_at = request.data.get('created_at')
+            if custom_created_at:
+                from django.utils.dateparse import parse_datetime
+                parsed_dt = parse_datetime(custom_created_at)
+                if parsed_dt:
+                    DepartmentSubmission.objects.filter(pk=submission.pk).update(uploaded_at=parsed_dt)
+                    if signed_file:
+                        File.objects.filter(pk=signed_file.pk).update(created_at=parsed_dt)
+                    MOUDocument.objects.filter(pk=mou_doc.pk).update(uploaded_at=parsed_dt)
+
+            # Update active shares status
+            shares = MOUShare.objects.filter(mou=mou)
+            if dept_folder:
+                shares = shares.filter(department=dept_folder)
+            shares.update(status='Signed MOU Uploaded')
+            
+        validity_text = f"Active from {signed_date} to {mou.expiry_date} ({mou.duration_months} Months)"
+        log_activity(request.user, f"Submitted signed MOU for '{mou.title}' from department '{user_dept_name}'. {validity_text}")
+        notify_admins("Signed MOU Uploaded", f"Signed MOU for '{mou.title}' uploaded by {request.user.name} from {user_dept_name}. {validity_text}.")
+        
+        return Response({
+            "detail": "Signed MOU submitted successfully.",
+            "signed_date": str(signed_date),
+            "expiry_date": str(mou.expiry_date),
+            "duration_months": mou.duration_months,
+            "message": f"Signed MOU uploaded! Validity calculated: {validity_text}."
+        }, status=status.HTTP_201_CREATED)
+
+class DepartmentSubmissionReviewView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, pk):
+        submission = get_object_or_404(DepartmentSubmission, id=pk)
+        action = request.data.get('action') # 'approve' or 'reject'
+        comments = request.data.get('comments', '')
+        
+        if action not in ['approve', 'reject']:
+            return Response({"detail": "Invalid action. Use 'approve' or 'reject'."}, status=status.HTTP_400_BAD_REQUEST)
+            
+        mou = submission.mou
+        with transaction.atomic():
+            if action == 'approve':
+                submission.review_status = 'Verified'
+                submission.reviewer_comments = comments
+                submission.save(update_fields=['review_status', 'reviewer_comments'])
+                
+                mou.status = 'Active'
+                mou.remarks = comments
+                mou.save(update_fields=['status', 'remarks'])
+                
+                shares = MOUShare.objects.filter(mou=mou)
+                if submission.department:
+                    shares = shares.filter(department=submission.department)
+                shares.update(status='Completed')
+                
+                log_activity(request.user, f"Approved department submission for MOU '{mou.title}'")
+                if submission.uploaded_by:
+                    send_notification(submission.uploaded_by, "Signed MOU Approved!", f"Signed MOU submission for '{mou.title}' has been verified and marked as Completed.")
+            else:
+                submission.review_status = 'Rejected'
+                submission.reviewer_comments = comments
+                submission.save(update_fields=['review_status', 'reviewer_comments'])
+                
+                mou.status = 'Draft'
+                mou.remarks = comments
+                mou.save(update_fields=['status', 'remarks'])
+                
+                shares = MOUShare.objects.filter(mou=mou)
+                if submission.department:
+                    shares = shares.filter(department=submission.department)
+                shares.update(status='Pending Upload')
+                
+                log_activity(request.user, f"Rejected department submission for MOU '{mou.title}'. Comments: {comments}")
+                if submission.uploaded_by:
+                    send_notification(submission.uploaded_by, "Signed MOU Submission Rejected", f"Signed MOU for '{mou.title}' was rejected. Reason: {comments}")
+                    
+        return Response({"detail": f"Submission review completed: {action}."})
+
+class MOUSharedDashboardView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        dept_name = request.user.department
+        if not dept_name:
+            return Response({
+                "assigned": 0, "pending": 0, "completed": 0, "expiring": 0, "recently_shared": []
+            })
+            
+        shares = MOUShare.objects.filter(department__name=dept_name)
+        assigned_count = shares.count()
+        pending_count = shares.filter(status__in=['Shared', 'Viewed', 'Pending Upload']).count()
+        completed_count = shares.filter(status__in=['Verified by Legal Cell', 'Completed']).count()
+        
+        today = date.today()
+        expiring_count = shares.filter(mou__expiry_date__lte=today + timedelta(days=30), mou__expiry_date__gte=today).count()
+        
+        recently_shared = []
+        for s in shares.order_by('-shared_at')[:5]:
+            recently_shared.append({
+                'id': s.mou.id,
+                'title': s.mou.title,
+                'mou_number': s.mou.mou_number,
+                'partner_organization': s.mou.partner_organization,
+                'permission': s.permission,
+                'status': s.status,
+                'shared_at': s.shared_at
+            })
+            
+        return Response({
+            "assigned": assigned_count,
+            "pending": pending_count,
+            "completed": completed_count,
+            "expiring": expiring_count,
+            "recently_shared": recently_shared
+        })
+
+
+from rest_framework import viewsets
+from rest_framework.decorators import action
+from .models import (
+    TemplateCategory, OrganizationType, CollaborationType, DocumentType, Tag,
+    DepartmentCategory, Department, TemplateCollection, TemplateDocument
+)
+from .serializers import (
+    TemplateCategorySerializer, OrganizationTypeSerializer, CollaborationTypeSerializer,
+    DocumentTypeSerializer, TagSerializer, DepartmentCategorySerializer, DepartmentSerializer,
+    TemplateCollectionSerializer, TemplateDocumentSerializer
+)
+
+class MasterDataMixin:
+    """
+    Shared mixin for all master-data ViewSets.
+    - destroy(): catches ProtectedError (item is in use) → 409 Conflict
+    - create() / update(): catches IntegrityError (duplicate name) → 400 Bad Request
+    """
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        try:
+            self.perform_destroy(instance)
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except ProtectedError as e:
+            linked = len(e.protected_objects)
+            return Response(
+                {"detail": f"Cannot delete '{instance.name}' — it is currently linked to {linked} record(s). "
+                           "Deactivate it instead, or remove all linked records first."},
+                status=status.HTTP_409_CONFLICT
+            )
+
+    def create(self, request, *args, **kwargs):
+        try:
+            return super().create(request, *args, **kwargs)
+        except IntegrityError:
+            return Response(
+                {"detail": "A record with this name already exists."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    def update(self, request, *args, **kwargs):
+        try:
+            return super().update(request, *args, **kwargs)
+        except IntegrityError:
+            return Response(
+                {"detail": "A record with this name already exists."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+
+class TemplateCategoryViewSet(MasterDataMixin, viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    queryset = TemplateCategory.objects.all().order_by('name')
+    serializer_class = TemplateCategorySerializer
+
+class OrganizationTypeViewSet(MasterDataMixin, viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    queryset = OrganizationType.objects.all().order_by('name')
+    serializer_class = OrganizationTypeSerializer
+
+class CollaborationTypeViewSet(MasterDataMixin, viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    queryset = CollaborationType.objects.all().order_by('name')
+    serializer_class = CollaborationTypeSerializer
+
+class DocumentTypeViewSet(MasterDataMixin, viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    queryset = DocumentType.objects.all().order_by('name')
+    serializer_class = DocumentTypeSerializer
+
+class TagViewSet(MasterDataMixin, viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    queryset = Tag.objects.all().order_by('name')
+    serializer_class = TagSerializer
+
+class DepartmentCategoryViewSet(MasterDataMixin, viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    queryset = DepartmentCategory.objects.all().order_by('name')
+    serializer_class = DepartmentCategorySerializer
+
+class DepartmentViewSet(MasterDataMixin, viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    queryset = Department.objects.all().order_by('name')
+    serializer_class = DepartmentSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        category_id = self.request.query_params.get('category')
+        if category_id:
+            qs = qs.filter(category_id=category_id)
+        return qs
+
+class TemplateCollectionViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    queryset = TemplateCollection.objects.all().order_by('-created_at')
+    serializer_class = TemplateCollectionSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        
+        category_id = self.request.query_params.get('category')
+        org_type_id = self.request.query_params.get('organization_type')
+        collab_type_id = self.request.query_params.get('collaboration_type')
+        dept_cat_id = self.request.query_params.get('department_category')
+        dept_id = self.request.query_params.get('department')
+        search_query = self.request.query_params.get('q')
+
+        if category_id:
+            qs = qs.filter(category_id=category_id)
+        if org_type_id:
+            qs = qs.filter(organization_type_id=org_type_id)
+        if collab_type_id:
+            qs = qs.filter(collaboration_type_id=collab_type_id)
+        if dept_cat_id:
+            qs = qs.filter(department_category_id=dept_cat_id)
+        if dept_id:
+            qs = qs.filter(department_id=dept_id)
+        if search_query:
+            qs = qs.filter(
+                Q(template_name__icontains=search_query) |
+                Q(description__icontains=search_query) |
+                Q(tags__name__icontains=search_query)
+            ).distinct()
+
+        return qs
+
+    def perform_create(self, serializer):
+        collection = serializer.save(created_by=self.request.user)
+        log_activity(self.request.user, f"Created Template Collection '{collection.template_name}'", module="Templates")
+
+    def perform_update(self, serializer):
+        collection = serializer.save()
+        log_activity(self.request.user, f"Updated Template Collection '{collection.template_name}'", module="Templates")
+
+    @action(detail=False, methods=['get'], url_path='stats')
+    def stats(self, request):
+        collections = TemplateCollection.objects.all()
+        documents = TemplateDocument.objects.all()
+        categories = TemplateCategory.objects.all()
+
+        total_templates = collections.count()
+        total_pdfs = documents.count()
+        total_categories = categories.count()
+
+        cat_dist = list(collections.values('category__name').annotate(value=Count('id')))
+        dept_dist = list(collections.values('department__name').annotate(value=Count('id')))
+
+        recent_collections = collections.order_by('-created_at')[:5]
+        recent_data = TemplateCollectionSerializer(recent_collections, many=True).data
+
+        storage_mb = documents.count() * 1.5
+
+        return Response({
+            "total_templates": total_templates,
+            "total_pdfs": total_pdfs,
+            "total_categories": total_categories,
+            "category_distribution": cat_dist,
+            "department_distribution": dept_dist,
+            "recent_templates": recent_data,
+            "storage_usage_mb": round(storage_mb, 2)
+        })
+
+    @action(detail=True, methods=['post'], url_path='upload-document')
+    def upload_document(self, request, pk=None):
+        collection = self.get_object()
+        doc_file = request.FILES.get('file')
+        doc_name = request.data.get('document_name')
+        doc_type_id = request.data.get('document_type_id')
+        version = request.data.get('version', '1.0')
+        effective_date = request.data.get('effective_date') or None
+        expiry_date = request.data.get('expiry_date') or None
+        revision_date = request.data.get('revision_date') or None
+        remarks = request.data.get('remarks', '')
+
+        if not doc_file or not doc_name or not doc_type_id:
+            return Response({"detail": "File, document name, and document type are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        doc_type = get_object_or_404(DocumentType, id=doc_type_id)
+
+        import mimetypes
+        file_type, _ = mimetypes.guess_type(doc_file.name)
+        if not file_type:
+            file_type = "application/pdf"
+
+        from services import drive_service
+        drive_meta = drive_service.upload_file(
+            doc_file,
+            doc_file.name,
+            file_type,
+            None
+        )
+
+        doc = TemplateDocument.objects.create(
+            template_collection=collection,
+            document_name=doc_name,
+            document_type=doc_type,
+            google_file_id=drive_meta['id'],
+            version=version,
+            effective_date=effective_date,
+            expiry_date=expiry_date,
+            revision_date=revision_date,
+            remarks=remarks,
+            uploaded_by=request.user,
+            status='Active'
+        )
+
+        log_activity(request.user, f"Uploaded template document '{doc.document_name}' v{doc.version} inside collection '{collection.template_name}'", module="Templates")
+
+        return Response(TemplateDocumentSerializer(doc).data, status=status.HTTP_201_CREATED)
+
+
+class TemplateDocumentViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    queryset = TemplateDocument.objects.all().order_by('-uploaded_at')
+    serializer_class = TemplateDocumentSerializer
+
+    @action(detail=True, methods=['get'], url_path='log-preview')
+    def log_preview(self, request, pk=None):
+        doc = self.get_object()
+        log_activity(request.user, f"Previewed template document '{doc.document_name}' v{doc.version}", module="Templates")
+        return Response({"detail": "Preview logged."})
+
+    @action(detail=True, methods=['get'], url_path='log-download')
+    def log_download(self, request, pk=None):
+        doc = self.get_object()
+        log_activity(request.user, f"Downloaded template document '{doc.document_name}' v{doc.version}", module="Templates")
+        return Response({"detail": "Download logged."})
+
+    @action(detail=True, methods=['post'], url_path='archive')
+    def archive(self, request, pk=None):
+        doc = self.get_object()
+        doc.status = 'Archived'
+        doc.save(update_fields=['status'])
+        log_activity(request.user, f"Archived template document '{doc.document_name}' v{doc.version}", module="Templates")
+        return Response(TemplateDocumentSerializer(doc).data)
+

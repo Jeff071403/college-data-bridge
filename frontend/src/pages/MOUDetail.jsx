@@ -4,7 +4,10 @@ import {
   Box, Grid, Card, CardContent, Typography, Button, IconButton, 
   Chip, Divider, Avatar, CircularProgress, Alert, Tooltip, Dialog,
   DialogTitle, DialogContent, DialogActions, TextField, Checkbox, 
-  FormControlLabel, FormGroup, Paper
+  FormControlLabel, FormGroup, Paper, Table, TableBody, TableCell,
+  TableContainer, TableHead, TableRow, MenuItem, Select, FormControl,
+  InputLabel,
+  Autocomplete
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -17,23 +20,28 @@ import FolderIcon from '@mui/icons-material/Folder';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import CheckIcon from '@mui/icons-material/Check';
 import DescriptionIcon from '@mui/icons-material/Description';
-import EditIcon from '@mui/icons-material/Edit';
+import ShareIcon from '@mui/icons-material/Share';
+import DeleteIcon from '@mui/icons-material/Delete';
+import TimelineIcon from '@mui/icons-material/Timeline';
 
-import { getMOU, approveRejectMOU, renewMOU, submitSignedMOU } from '../services/mouApi';
+import { 
+  getMOU, approveRejectMOU, renewMOU, 
+  getMOUShares, shareMOU, revokeMOUShare,
+  reviewDepartmentSubmission
+} from '../services/mouApi';
 import { useAuth } from '../context/AuthContext';
+import api from '../services/api';
 import StatusPill from '../components/StatusPill';
 
 const TIMELINE_STEPS = [
   { key: 'Folder Created', label: 'Folder Created', desc: 'MOU Organization Folder created' },
-  { key: 'Original Uploaded', label: 'Original Uploaded', desc: 'Initial draft MOU document attached' },
-  { key: 'Shared', label: 'Shared with Department', desc: 'Distributed to department coordinators' },
-  { key: 'Signed Uploaded', label: 'Signed MOU Uploaded', desc: 'Executed signed document submitted' },
-  { key: 'Approved', label: 'Approved & Active', desc: 'Verified by legal compliance' },
-  { key: 'Renewed', label: 'Renewed', desc: 'Agreement extended into new term' },
+  { key: 'Original Uploaded', label: 'Original Draft Uploaded', desc: 'Initial draft MOU document attached' },
+  { key: 'Shared', label: 'Shared with Department', desc: 'MOU shared with department coordinators' },
+  { key: 'Signed Uploaded', label: 'Signed MOU Uploaded', desc: 'Signed executed copy submitted by department' },
+  { key: 'Approved', label: 'Approved & Active', desc: 'Verified by Legal Cell / Admin' },
 ];
 
-const BENEFICIARY_OPTIONS = ['Students', 'Faculty', 'Researchers', 'Institution', 'Others'];
-const OPPORTUNITY_OPTIONS = ['Internship', 'Placement', 'Workshop', 'Training', 'Industrial Visit', 'Research', 'Student Exchange', 'Consultancy', 'Guest Lecture', 'Others'];
+// Departments loaded dynamically from master table API
 
 const MOUDetail = () => {
   const { id } = useParams();
@@ -43,35 +51,35 @@ const MOUDetail = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Department User Upload Signed State
-  const [signedUploadOpen, setSignedUploadOpen] = useState(false);
-  const [signedDate, setSignedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [durationMonths, setDurationMonths] = useState(12);
-  const [summary, setSummary] = useState('');
-  const [purpose, setPurpose] = useState('');
-  const [objectives, setObjectives] = useState('');
-  const [selectedBeneficiaries, setSelectedBeneficiaries] = useState(['Students', 'Faculty']);
-  const [selectedOpportunities, setSelectedOpportunities] = useState(['Internship', 'Placement']);
-  const [submittingSigned, setSubmittingSigned] = useState(false);
+  // Sharing State
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [activeShares, setActiveShares] = useState([]);
+  const [selectedDepts, setSelectedDepts] = useState([]);
+  const [sharePermission, setSharePermission] = useState('View Only');
+  const [sharing, setSharing] = useState(false);
 
-  // Admin Approval Dialog
-  const [approveDialogOpen, setApproveDialogOpen] = useState(false);
-  const [approvalAction, setApprovalAction] = useState('approve');
-  const [remarks, setRemarks] = useState('');
-  const [processing, setProcessing] = useState(false);
+  // Dynamic Master Data states
+  const [deptCategories, setDeptCategories] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [filteredShareDepts, setFilteredShareDepts] = useState([]);
+  const [shareCategory, setShareCategory] = useState('');
+  const [shareDept, setShareDept] = useState('');
+
+  // Legal Submission Review Dialog
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+  const [reviewAction, setReviewAction] = useState('approve'); // 'approve' or 'reject'
+  const [reviewComments, setReviewComments] = useState('');
+  const [reviewing, setReviewing] = useState(false);
+  const [selectedSubmissionId, setSelectedSubmissionId] = useState(null);
 
   const fetchMou = async () => {
     setLoading(true);
     try {
       const data = await getMOU(id);
       setMou(data);
-      setSignedDate(data.signed_date || new Date().toISOString().split('T')[0]);
-      setDurationMonths(data.duration_months || 12);
-      setSummary(data.summary || '');
-      setPurpose(data.purpose || '');
-      setObjectives(data.objectives || '');
-      if (data.beneficiaries?.length) setSelectedBeneficiaries(data.beneficiaries);
-      if (data.opportunities?.length) setSelectedOpportunities(data.opportunities);
+      // Fetch shares as well
+      const shares = await getMOUShares(id);
+      setActiveShares(shares);
     } catch (err) {
       console.error('Failed to load folder details:', err);
       setError('MOU Folder not found or permission denied.');
@@ -82,50 +90,69 @@ const MOUDetail = () => {
 
   useEffect(() => {
     fetchMou();
+    api.get('/api/mous/master/dept-categories/').then(res => setDeptCategories(res.data));
+    api.get('/api/mous/master/departments/').then(res => setDepartments(res.data));
   }, [id]);
 
-  const calculateExpiryPreview = (sDate, durMonths) => {
-    if (!sDate) return 'N/A';
-    try {
-      const sd = new Date(sDate);
-      sd.setMonth(sd.getMonth() + parseInt(durMonths || 12));
-      return sd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    } catch {
-      return 'N/A';
-    }
+  const handleShareCategoryChange = (e) => {
+    const catId = e.target.value;
+    setShareCategory(catId);
+    setShareDept('');
+    setFilteredShareDepts(departments.filter(d => d.category === catId));
   };
 
-  const handleSubmitSigned = async () => {
-    setSubmittingSigned(true);
+  const handleShareSubmit = async () => {
+    if (!shareDept) return;
+    setSharing(true);
     try {
-      await submitSignedMOU(id, {
-        signed_date: signedDate,
-        duration_months: durationMonths,
-        summary,
-        purpose,
-        objectives,
-        beneficiaries: selectedBeneficiaries,
-        opportunities: selectedOpportunities,
+      await shareMOU(id, {
+        department_name: shareDept,
+        permission: sharePermission
       });
-      setSignedUploadOpen(false);
-      fetchMou();
+      setShareDept('');
+      setShareCategory('');
+      setFilteredShareDepts([]);
+      // Reload shares
+      const shares = await getMOUShares(id);
+      setActiveShares(shares);
     } catch (err) {
-      console.error('Submit signed failed:', err);
+      console.error('Sharing failed:', err);
+      setError('Failed to share folder with selected department.');
     } finally {
-      setSubmittingSigned(false);
+      setSharing(false);
     }
   };
 
-  const handleApproveReject = async () => {
-    setProcessing(true);
+  const handleRevokeShare = async (shareId) => {
+    if (window.confirm('Revoke folder share for this department?')) {
+      try {
+        await revokeMOUShare(shareId);
+        const shares = await getMOUShares(id);
+        setActiveShares(shares);
+      } catch (err) {
+        console.error('Revocation failed:', err);
+      }
+    }
+  };
+
+  const handleOpenReview = (submissionId, action) => {
+    setSelectedSubmissionId(submissionId);
+    setReviewAction(action);
+    setReviewComments('');
+    setReviewDialogOpen(true);
+  };
+
+  const handleConfirmReview = async () => {
+    setReviewing(true);
     try {
-      await approveRejectMOU(id, approvalAction, remarks);
-      setApproveDialogOpen(false);
+      await reviewDepartmentSubmission(selectedSubmissionId, reviewAction, reviewComments);
+      setReviewDialogOpen(false);
       fetchMou();
     } catch (err) {
-      console.error('Approval action failed:', err);
+      console.error('Review action failed:', err);
+      setError('Failed to complete submission review.');
     } finally {
-      setProcessing(false);
+      setReviewing(false);
     }
   };
 
@@ -149,14 +176,26 @@ const MOUDetail = () => {
   if (error || !mou) return (
     <Box sx={{ p: 4, textAlign: 'center' }}>
       <Alert severity="error" sx={{ mb: 2 }}>{error || 'Folder not found.'}</Alert>
-      <Button startIcon={<ArrowBackIcon />} onClick={() => navigate('/mou-repository')}>
-        Back to Repository
+      <Button startIcon={<ArrowBackIcon />} onClick={() => navigate('/explorer')}>
+        Back to Explorer
       </Button>
     </Box>
   );
 
   const daysLeft = mou.days_left;
   const isAdmin = user?.role?.name === 'Super Admin' || user?.role?.name === 'Admin' || user?.role?.name === 'Lawyer / MOU Administrator';
+
+  // Find active step in timeline based on MOU status
+  const getTimelineStepIndex = (status) => {
+    switch (status) {
+      case 'Draft': return 1;
+      case 'Shared': return 2;
+      case 'Pending Verification': return 3;
+      case 'Active': return 4;
+      default: return 0;
+    }
+  };
+  const activeStepIdx = getTimelineStepIndex(mou.status);
 
   return (
     <Box sx={{ flexGrow: 1 }} className="animate-fade-slide-up">
@@ -165,15 +204,15 @@ const MOUDetail = () => {
       <Box sx={{ mb: 2 }}>
         <Button
           startIcon={<ArrowBackIcon />}
-          onClick={() => navigate('/mou-repository')}
+          onClick={() => navigate('/explorer')}
           sx={{ fontWeight: 700, color: 'text.secondary' }}
         >
-          Back to Folder Repository
+          Back to MOU Repositories
         </Button>
       </Box>
 
       {/* ── Folder Details Header ── */}
-      <Card sx={{ p: 3.5, mb: 3.5, borderRadius: '24px', border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', position: 'relative' }}>
+      <Card sx={{ p: 3.5, mb: 3.5, borderRadius: '24px', border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 2 }}>
           <Box sx={{ display: 'flex', gap: 2.5, alignItems: 'flex-start' }}>
             <Avatar sx={{ bgcolor: 'rgba(79, 70, 229, 0.12)', color: 'primary.main', width: 64, height: 64, borderRadius: '18px' }}>
@@ -203,7 +242,7 @@ const MOUDetail = () => {
                   Partner: <strong>{mou.partner_organization}</strong>
                 </Typography>
                 <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                  Department: <strong>{mou.department_name || 'Engineering'}</strong>
+                  Category: <strong>{mou.mou_type_name || 'Standard MOU'}</strong>
                 </Typography>
                 <Typography variant="body2" sx={{ fontWeight: 600 }}>
                   Owner: <strong>{mou.created_by_details?.name || 'System'}</strong>
@@ -214,64 +253,123 @@ const MOUDetail = () => {
 
           {/* Action Buttons */}
           <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
-            {/* Department Upload Signed Copy */}
-            {(!isAdmin || mou.status === 'Draft' || mou.status === 'Shared') && (
-              <Button
-                variant="contained"
-                startIcon={<CloudUploadIcon />}
-                onClick={() => setSignedUploadOpen(true)}
-                sx={{ borderRadius: '12px', fontWeight: 700, background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)' }}
-              >
-                Upload Signed Copy
-              </Button>
-            )}
-
-            {/* Admin Verification Actions */}
-            {isAdmin && mou.status === 'Pending Verification' && (
+            {isAdmin && (
               <>
                 <Button
                   variant="contained"
-                  color="success"
-                  startIcon={<CheckCircleIcon />}
-                  onClick={() => { setApprovalAction('approve'); setApproveDialogOpen(true); }}
-                  sx={{ borderRadius: '12px', fontWeight: 700 }}
+                  startIcon={<ShareIcon />}
+                  onClick={() => setShareDialogOpen(true)}
+                  sx={{ borderRadius: '12px', fontWeight: 700, background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)' }}
                 >
-                  Approve MOU Folder
+                  Share Folder
                 </Button>
-                <Button
-                  variant="outlined"
-                  color="error"
-                  startIcon={<CancelIcon />}
-                  onClick={() => { setApprovalAction('reject'); setApproveDialogOpen(true); }}
-                  sx={{ borderRadius: '12px', fontWeight: 700 }}
-                >
-                  Reject / Request Changes
-                </Button>
-              </>
-            )}
 
-            {(mou.status === 'Active' || mou.status === 'Expired') && (
-              <Button
-                variant="contained"
-                onClick={handleRenew}
-                startIcon={<AutorenewIcon />}
-                sx={{ borderRadius: '12px', fontWeight: 700, background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)' }}
-              >
-                One-Click Renewal
-              </Button>
+                {(mou.status === 'Active' || mou.status === 'Expired') && (
+                  <Button
+                    variant="outlined"
+                    onClick={handleRenew}
+                    startIcon={<AutorenewIcon />}
+                    sx={{ borderRadius: '12px', fontWeight: 700 }}
+                  >
+                    One-Click Renewal
+                  </Button>
+                )}
+              </>
             )}
           </Box>
         </Box>
       </Card>
 
-      <Grid container spacing={3}>
-        {/* ═══════════════ LEFT COLUMN (Summary, Purpose, Beneficiaries, Documents) ═══════════════ */}
-        <Grid item xs={12} md={8}>
+      {/* ── Pending Submissions Verification Banner ── */}
+      {isAdmin && mou.submissions && mou.submissions.length > 0 && (
+        <Card sx={{ border: '2px solid rgba(245,158,11,0.3)', bgcolor: 'rgba(245,158,11,0.03)', borderRadius: '20px', p: 3, mb: 3.5 }}>
+          <Typography variant="h6" sx={{ fontWeight: 800, mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <span style={{ color: '#F59E0B' }}>●</span> Department Submission Pending Compliance Review
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            A signed copy has been uploaded by the department. Verify compliance details and documents below.
+          </Typography>
 
-          {/* Summary Section */}
+          {mou.submissions.map((sub) => (
+            <Box key={sub.id} sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', p: 2.5, borderRadius: '14px', mb: 2 }}>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={4}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>SIGNED DATE</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 700 }}>{sub.signed_date}</Typography>
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>MOU TERM MONTH/YEAR</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 700 }}>{sub.mou_month} / {sub.mou_year}</Typography>
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>SUBMITTED BY</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 700 }}>{sub.uploaded_by} ({sub.department_name})</Typography>
+                </Grid>
+
+                <Grid item xs={12}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>EXECUTIVE SUMMARY</Typography>
+                  <Typography variant="body2" sx={{ mt: 0.5 }}>{sub.summary}</Typography>
+                </Grid>
+
+                <Grid item xs={12}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>PURPOSE</Typography>
+                  <Typography variant="body2" sx={{ mt: 0.5 }}>{sub.purpose}</Typography>
+                </Grid>
+
+                <Grid item xs={12}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, mb: 0.5, display: 'block' }}>BENEFITS</Typography>
+                  {Array.isArray(sub.benefits) ? sub.benefits.map((b, idx) => (
+                    <Chip key={idx} label={b} size="small" sx={{ mr: 1, fontWeight: 700 }} />
+                  )) : <Typography variant="body2">{sub.benefits}</Typography>}
+                </Grid>
+
+                {sub.remarks && (
+                  <Grid item xs={12}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>REMARKS</Typography>
+                    <Typography variant="body2" sx={{ mt: 0.5, fontStyle: 'italic' }}>{sub.remarks}</Typography>
+                  </Grid>
+                )}
+
+                {sub.reviewer_comments && (
+                  <Grid item xs={12}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>COMPLIANCE FEEDBACK</Typography>
+                    <Typography variant="body2" sx={{ mt: 0.5, fontStyle: 'italic', color: 'error.main' }}>{sub.reviewer_comments}</Typography>
+                  </Grid>
+                )}
+              </Grid>
+
+              {sub.review_status === 'Pending Verification' && (
+                <Box sx={{ display: 'flex', gap: 1.5, mt: 3, justifyContent: 'flex-end' }}>
+                  <Button 
+                    variant="outlined" 
+                    color="error" 
+                    onClick={() => handleOpenReview(sub.id, 'reject')}
+                    sx={{ borderRadius: '8px', fontWeight: 700 }}
+                  >
+                    Reject Submission
+                  </Button>
+                  <Button 
+                    variant="contained" 
+                    color="success" 
+                    onClick={() => handleOpenReview(sub.id, 'approve')}
+                    sx={{ borderRadius: '8px', fontWeight: 700 }}
+                  >
+                    Verify & Approve Folder
+                  </Button>
+                </Box>
+              )}
+            </Box>
+          ))}
+        </Card>
+      )}
+
+      {/* Main Details Grid */}
+      <Grid container spacing={3}>
+        {/* Left Column: summary and documents */}
+        <Grid item xs={12} md={8}>
           <Card sx={{ p: 3, mb: 3, borderRadius: '20px', border: '1px solid', borderColor: 'divider' }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 1 }}>
-              Folder Summary
+              Agreement Summary
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 3, lineHeight: 1.7 }}>
               {mou.summary || 'No summary entered yet.'}
@@ -280,42 +378,17 @@ const MOUDetail = () => {
             <Divider sx={{ my: 2 }} />
 
             <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1 }}>
-              Purpose of Agreement
+              Primary Purpose
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2, lineHeight: 1.7 }}>
+            <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.7 }}>
               {mou.purpose || 'No purpose detailed.'}
             </Typography>
           </Card>
 
-          {/* Checkbox Summary: Beneficiaries & Opportunities */}
-          <Card sx={{ p: 3, mb: 3, borderRadius: '20px', border: '1px solid', borderColor: 'divider' }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2 }}>
-              Target Beneficiaries & Opportunities
-            </Typography>
-
-            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: 'uppercase', display: 'block', mb: 1 }}>
-              Beneficiaries
-            </Typography>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2.5 }}>
-              {(mou.beneficiaries || []).map((b, i) => (
-                <Chip key={i} label={b} size="small" icon={<CheckIcon fontSize="small" />} sx={{ bgcolor: 'rgba(16,185,129,0.12)', color: '#10B981', fontWeight: 800 }} />
-              ))}
-            </Box>
-
-            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: 'uppercase', display: 'block', mb: 1 }}>
-              Opportunities
-            </Typography>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-              {(mou.opportunities || []).map((o, i) => (
-                <Chip key={i} label={o} size="small" icon={<CheckIcon fontSize="small" />} sx={{ bgcolor: 'rgba(79,70,229,0.12)', color: '#4F46E5', fontWeight: 800 }} />
-              ))}
-            </Box>
-          </Card>
-
-          {/* Documents Section */}
+          {/* Folder Documents & Files */}
           <Card sx={{ p: 3, borderRadius: '20px', border: '1px solid', borderColor: 'divider' }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2 }}>
-              Folder Documents & Files
+              Folder Documents & Files (Cloud Storage)
             </Typography>
 
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -323,16 +396,21 @@ const MOUDetail = () => {
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                   <DescriptionIcon sx={{ color: 'primary.main' }} />
                   <Box>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Original Draft MOU</Typography>
-                    <Typography variant="caption" color="text.secondary">Uploaded by Administrator</Typography>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Original Draft Agreement</Typography>
+                    <Typography variant="caption" color="text.secondary">Draft Uploaded by Creator</Typography>
                   </Box>
                 </Box>
-                {mou.original_mou_details?.file_field ? (
-                  <Button size="small" startIcon={<CloudDownloadIcon />} href={mou.original_mou_details.file_field} download>
-                    Download Original
+                {mou.original_mou_details ? (
+                  <Button 
+                    size="small" 
+                    startIcon={<CloudDownloadIcon />} 
+                    href={mou.original_mou_details.web_view_link || mou.original_mou_details.file_url} 
+                    target="_blank"
+                  >
+                    View / Download
                   </Button>
                 ) : (
-                  <Chip label="Attached in Folder" size="small" variant="outlined" />
+                  <Chip label="Not Uploaded" size="small" variant="outlined" />
                 )}
               </Box>
 
@@ -340,31 +418,34 @@ const MOUDetail = () => {
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                   <DescriptionIcon sx={{ color: '#10B981' }} />
                   <Box>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Executed Signed Copy</Typography>
-                    <Typography variant="caption" color="text.secondary">Submitted with Signed Date</Typography>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Executed Signed Agreement</Typography>
+                    <Typography variant="caption" color="text.secondary">Verified Scanned Signed Version</Typography>
                   </Box>
                 </Box>
-                {mou.signed_mou_details?.file_field ? (
-                  <Button size="small" color="success" startIcon={<CloudDownloadIcon />} href={mou.signed_mou_details.file_field} download>
-                    Download Signed
+                {mou.signed_mou_details ? (
+                  <Button 
+                    size="small" 
+                    color="success" 
+                    startIcon={<CloudDownloadIcon />} 
+                    href={mou.signed_mou_details.web_view_link || mou.signed_mou_details.file_url} 
+                    target="_blank"
+                  >
+                    View / Download
                   </Button>
                 ) : (
-                  <Button size="small" variant="contained" startIcon={<CloudUploadIcon />} onClick={() => setSignedUploadOpen(true)}>
-                    Upload Signed Copy
-                  </Button>
+                  <Chip label="Pending Submission" size="small" variant="outlined" />
                 )}
               </Box>
             </Box>
           </Card>
         </Grid>
 
-        {/* ═══════════════ RIGHT COLUMN (Dates, Timeline & Coordinators) ═══════════════ */}
+        {/* Right Column: dates and timeline */}
         <Grid item xs={12} md={4}>
-
-          {/* Dates Card */}
+          {/* Expiry Card */}
           <Card sx={{ p: 3, mb: 3, borderRadius: '20px', border: '1px solid', borderColor: 'divider' }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2 }}>
-              Agreement Dates & Expiry
+              Agreement Dates & Compliance
             </Typography>
 
             <Box sx={{ mb: 2 }}>
@@ -378,176 +459,212 @@ const MOUDetail = () => {
             </Box>
 
             <Box sx={{ p: 2, borderRadius: '12px', bgcolor: 'rgba(79,70,229,0.06)', border: '1px solid rgba(79,70,229,0.18)' }}>
-              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>Calculated Expiry Date</Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>Expiry Date</Typography>
               <Typography variant="h6" sx={{ fontWeight: 900, color: 'primary.main' }}>{mou.expiry_date || 'N/A'}</Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>Formula: Signed Date + {mou.duration_months} Months</Typography>
             </Box>
           </Card>
 
           {/* Activity Timeline */}
-          <Card sx={{ p: 3, mb: 3, borderRadius: '20px', border: '1px solid', borderColor: 'divider' }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2.5 }}>
-              Activity Timeline
+          <Card sx={{ p: 3, borderRadius: '20px', border: '1px solid', borderColor: 'divider' }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 2.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <TimelineIcon /> Progress Lifecycle
             </Typography>
 
-            <Box sx={{ position: 'relative', pl: 2 }}>
-              {TIMELINE_STEPS.map((step) => (
-                <Box key={step.key} sx={{ position: 'relative', mb: 2.5, pl: 2 }}>
-                  <Box sx={{
-                    position: 'absolute', left: -14, top: 2, width: 22, height: 22,
-                    borderRadius: '50%', bgcolor: 'primary.main', color: '#fff',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center'
-                  }}>
-                    <CheckIcon sx={{ fontSize: '0.8rem' }} />
+            <Box sx={{ position: 'relative', pl: 1 }}>
+              {TIMELINE_STEPS.map((step, idx) => {
+                const isActive = idx <= activeStepIdx;
+                return (
+                  <Box key={step.key} sx={{ position: 'relative', mb: 2.5, pl: 3.5, borderLeft: idx < TIMELINE_STEPS.length - 1 ? '2px solid' : 'none', borderLeftColor: isActive ? 'primary.main' : 'divider' }}>
+                    <Box sx={{
+                      position: 'absolute', left: -9, top: 0, width: 16, height: 16,
+                      borderRadius: '50%', bgcolor: isActive ? 'primary.main' : 'divider',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                      {isActive && <CheckIcon sx={{ fontSize: '0.65rem', color: '#fff' }} />}
+                    </Box>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 800, fontSize: '0.84rem', color: isActive ? 'text.primary' : 'text.secondary' }}>
+                      {step.label}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.72rem' }}>
+                      {step.desc}
+                    </Typography>
                   </Box>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 800, fontSize: '0.84rem' }}>
-                    {step.label}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.72rem' }}>
-                    {step.desc}
-                  </Typography>
-                </Box>
-              ))}
+                );
+              })}
             </Box>
           </Card>
         </Grid>
       </Grid>
 
-      {/* ── Dialog: Department Upload Signed Copy & Summary Form ── */}
-      <Dialog
-        open={signedUploadOpen}
-        onClose={() => setSignedUploadOpen(false)}
-        maxWidth="sm"
+      {/* ── Share Modal ── */}
+      <Dialog 
+        open={shareDialogOpen} 
+        onClose={() => setShareDialogOpen(false)} 
+        maxWidth="md" 
         fullWidth
         PaperProps={{ sx: { borderRadius: '24px', p: 1 } }}
       >
-        <DialogTitle sx={{ fontWeight: 800 }}>Upload Signed MOU & Fill Details</DialogTitle>
-        <DialogContent>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
-            Submit executed agreement details. Expiry date will update live based on the selected Signed Date.
-          </Typography>
+        <DialogTitle sx={{ fontWeight: 800 }}>Share Folder Permissions</DialogTitle>
+        <DialogContent dividers>
+          <Grid container spacing={3.5}>
+            {/* Left: select departments and permission */}
+            <Grid item xs={12} md={5}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1.5 }}>
+                Share with Department
+              </Typography>
 
-          <Grid container spacing={2.5}>
-            {/* 1. Scanned Signed MOU Document Upload Box */}
-            <Grid item xs={12}>
-              <Box
-                sx={{
-                  border: '2px dashed',
-                  borderColor: 'primary.main',
-                  borderRadius: '16px',
-                  p: 3,
-                  textAlign: 'center',
-                  bgcolor: 'rgba(79, 70, 229, 0.04)',
-                  cursor: 'pointer',
-                  '&:hover': { bgcolor: 'rgba(79, 70, 229, 0.08)' }
+              <FormControl fullWidth sx={{ mb: 2.5 }} required>
+                <InputLabel>Stream (Dept Category)</InputLabel>
+                <Select
+                  value={shareCategory}
+                  label="Stream (Dept Category)"
+                  onChange={handleShareCategoryChange}
+                >
+                  {deptCategories.map((c) => (
+                    <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <Autocomplete
+                disabled={!shareCategory}
+                options={filteredShareDepts}
+                getOptionLabel={(option) => {
+                  if (typeof option === 'string') return option;
+                  const catObj = deptCategories.find(c => c.id === shareCategory);
+                  let name = option.name;
+                  if (catObj && catObj.name === 'Aided' && name.endsWith(' (Aided)')) {
+                    return name.slice(0, -8);
+                  }
+                  if (catObj && catObj.name === 'Self-Financed (SFS)' && name.endsWith(' (SFS)')) {
+                    return name.slice(0, -6);
+                  }
+                  return name;
                 }}
+                value={filteredShareDepts.find(d => d.name === shareDept) || null}
+                onChange={(event, newValue) => {
+                  setShareDept(newValue ? newValue.name : '');
+                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    required
+                    label="Department"
+                    placeholder="Select Department"
+                  />
+                )}
+                sx={{ mb: 2.5 }}
+                fullWidth
+              />
+
+              <FormControl fullWidth sx={{ mb: 3 }}>
+                <InputLabel>Permission Rights</InputLabel>
+                <Select
+                  value={sharePermission}
+                  label="Permission Rights"
+                  onChange={(e) => setSharePermission(e.target.value)}
+                >
+                  <MenuItem value="View Only">View Only (Read Documents)</MenuItem>
+                  <MenuItem value="Upload Only">Upload Only (Submit Scanned MOU)</MenuItem>
+                  <MenuItem value="Edit">Edit (Rename/Modify Files)</MenuItem>
+                  <MenuItem value="Full Access">Full Access (All Operations)</MenuItem>
+                </Select>
+              </FormControl>
+
+              <Button 
+                variant="contained" 
+                fullWidth
+                onClick={handleShareSubmit}
+                disabled={sharing || !shareDept}
+                sx={{ borderRadius: '10px', fontWeight: 700 }}
               >
-                <CloudUploadIcon sx={{ fontSize: 44, color: 'primary.main', mb: 1 }} />
-                <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
-                  Upload Scanned Signed MOU File
-                </Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                  Drag & drop or click to choose PDF / scanned image document file
-                </Typography>
-                <Button variant="outlined" size="small" component="label" sx={{ mt: 1.5, borderRadius: '10px', fontWeight: 700 }}>
-                  Choose Scanned File
-                  <input type="file" hidden accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" />
-                </Button>
-              </Box>
+                {sharing ? 'Sharing...' : 'Add Share Rules'}
+              </Button>
             </Grid>
 
-            {/* 2. Signed Date Picker */}
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                type="date"
-                label="Signed Date"
-                value={signedDate}
-                onChange={(e) => setSignedDate(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-                helperText="Defaults to today's date, fully editable"
-              />
-            </Grid>
+            {/* Right: show active shares list */}
+            <Grid item xs={12} md={7}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1.5 }}>
+                Active Share Rules ({activeShares.length})
+              </Typography>
 
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Duration (Months - Read Only)"
-                value={`${durationMonths} Months`}
-                InputProps={{ readOnly: true }}
-              />
-            </Grid>
-
-            {/* Live Calculated Expiry Date Preview */}
-            <Grid item xs={12}>
-              <Box sx={{ p: 2, borderRadius: '14px', bgcolor: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
-                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: 'uppercase' }}>
-                  Live Calculated Expiry Date
-                </Typography>
-                <Typography variant="subtitle1" sx={{ fontWeight: 900, color: '#10B981' }}>
-                  {calculateExpiryPreview(signedDate, durationMonths)}
-                </Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
-                  Formula: Signed Date ({signedDate}) + {durationMonths} Months
-                </Typography>
-              </Box>
-            </Grid>
-
-            {/* 3. Short Summary Textarea */}
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                multiline
-                rows={3}
-                label="MOU Short Summary"
-                placeholder="Enter a brief summary of the signed agreement..."
-                value={summary}
-                onChange={(e) => setSummary(e.target.value)}
-              />
+              {activeShares.length === 0 ? (
+                <Alert severity="info" sx={{ borderRadius: '12px' }}>This folder is not currently shared.</Alert>
+              ) : (
+                <TableContainer component={Paper} sx={{ borderRadius: '14px', border: '1px solid', borderColor: 'divider', boxShadow: 'none' }}>
+                  <Table size="small">
+                    <TableHead sx={{ bgcolor: 'action.hover' }}>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 700 }}>Department</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>Rights</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
+                        <TableCell sx={{ fontWeight: 700 }} align="right">Action</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {activeShares.map((s) => (
+                        <TableRow key={s.id}>
+                          <TableCell sx={{ fontWeight: 600 }}>{s.department_name}</TableCell>
+                          <TableCell>
+                            <Chip label={s.permission} size="small" variant="outlined" sx={{ fontWeight: 700 }} />
+                          </TableCell>
+                          <TableCell>
+                            <Chip label={s.status} size="small" color={s.status === 'Completed' ? 'success' : 'default'} sx={{ fontWeight: 700 }} />
+                          </TableCell>
+                          <TableCell align="right">
+                            <IconButton color="error" size="small" onClick={() => handleRevokeShare(s.id)}>
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              )}
             </Grid>
           </Grid>
         </DialogContent>
-
-        <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setSignedUploadOpen(false)}>Cancel</Button>
-          <Button
-            variant="contained"
-            onClick={handleSubmitSigned}
-            disabled={submittingSigned}
-            sx={{ borderRadius: '12px', fontWeight: 700, background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)' }}
-          >
-            {submittingSigned ? 'Submitting...' : 'Submit & Verify Folder'}
-          </Button>
+        <DialogActions>
+          <Button onClick={() => setShareDialogOpen(false)} sx={{ fontWeight: 700 }}>Close</Button>
         </DialogActions>
       </Dialog>
 
-      {/* Admin Approval Remarks Dialog */}
-      <Dialog open={approveDialogOpen} onClose={() => setApproveDialogOpen(false)} maxWidth="xs" fullWidth>
+      {/* ── Compliance Verification Review Remarks Dialog ── */}
+      <Dialog 
+        open={reviewDialogOpen} 
+        onClose={() => setReviewDialogOpen(false)} 
+        maxWidth="xs" 
+        fullWidth
+        PaperProps={{ sx: { borderRadius: '20px' } }}
+      >
         <DialogTitle sx={{ fontWeight: 800 }}>
-          {approvalAction === 'approve' ? 'Approve MOU Folder' : 'Reject / Request Changes'}
+          {reviewAction === 'approve' ? 'Verify & Approve Submission' : 'Reject Submission'}
         </DialogTitle>
         <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Provide comments and remarks for the department coordinators.
+          </Typography>
           <TextField
             fullWidth
             multiline
             rows={3}
-            label="Verification Remarks"
-            value={remarks}
-            onChange={(e) => setRemarks(e.target.value)}
-            placeholder="Add compliance notes..."
-            sx={{ mt: 1 }}
+            label="Compliance Comments"
+            value={reviewComments}
+            onChange={(e) => setReviewComments(e.target.value)}
+            placeholder="Add compliance audit note..."
           />
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setApproveDialogOpen(false)}>Cancel</Button>
-          <Button
-            variant="contained"
-            color={approvalAction === 'approve' ? 'success' : 'error'}
-            onClick={handleApproveReject}
-            disabled={processing}
-            sx={{ borderRadius: '12px', fontWeight: 700 }}
+          <Button onClick={() => setReviewDialogOpen(false)} sx={{ fontWeight: 700 }}>Cancel</Button>
+          <Button 
+            variant="contained" 
+            color={reviewAction === 'approve' ? 'success' : 'error'}
+            onClick={handleConfirmReview}
+            disabled={reviewing}
+            sx={{ borderRadius: '10px', fontWeight: 700 }}
           >
-            Confirm
+            {reviewing ? 'Processing...' : 'Confirm Action'}
           </Button>
         </DialogActions>
       </Dialog>

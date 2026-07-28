@@ -44,7 +44,7 @@ const STAGES = [
     whoCanAct: ['Super Admin', 'Admin', 'Assigned Department Coordinators'],
     whatHappensNext: 'Parties review, discuss, and then sign the MOU.',
     notificationsFire: ['All assigned parties receive "New MOU shared with you"', 'Admin receives "MOU distributed" confirmation'],
-    tip: 'Check the Shared tab in Folder Explorer to see all MOUs awaiting your review.',
+    tip: 'Check the Shared tab in MOU Repositories to see all MOUs awaiting your review.',
   },
   {
     id: 'signed',
@@ -278,7 +278,7 @@ const SystemMap = () => {
   const [selected, setSelected] = useState(null);
 
   return (
-    <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1200, mx: 'auto' }} className="animate-fade-slide-up">
+    <Box sx={{ flexGrow: 1 }} className="animate-fade-slide-up">
 
       {/* Page Header */}
       <Box sx={{ mb: 4 }}>
@@ -361,7 +361,7 @@ const SystemMap = () => {
         </Typography>
         <Box component="ol" sx={{ m: 0, pl: 2.5, '& li': { mb: 1.2, fontSize: '0.85rem', color: 'text.secondary', lineHeight: 1.7 } }}>
           <li>Log in → check <strong>Dashboard</strong> for urgent alerts and compliance score.</li>
-          <li>Go to <strong>Folder Explorer</strong> to browse all MOU folders you have access to.</li>
+          <li>Go to <strong>MOU Repositories</strong> to browse all MOU folders you have access to.</li>
           <li>Click any file to preview it. Use the ⋮ menu to download, rename, or manage.</li>
           <li>To create a new MOU, navigate into a folder and click <strong>+ New Document</strong>.</li>
           <li>If an MOU is <strong>Expiring Soon</strong>, find it in the Dashboard alerts and start renewal.</li>

@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { 
   Box, Grid, Card, CardContent, Typography, Button, IconButton, 
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, 
   Paper, CircularProgress, Dialog, DialogTitle, DialogContent, 
   DialogActions, TextField, Menu, MenuItem, ListItemIcon, ListItemText,
   Alert, Divider, Chip, ToggleButtonGroup, ToggleButton, Switch, 
-  FormControlLabel, Autocomplete
+  FormControlLabel, Autocomplete, FormControl, InputLabel, Select
 } from '@mui/material';
+import FilterListIcon from '@mui/icons-material/FilterList';
+import StatusPill from '../components/StatusPill';
 import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolder';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
@@ -27,11 +29,14 @@ import DeleteIcon from '@mui/icons-material/Delete';
 
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useSiteTime } from '../context/SiteTimeContext';
 import BreadcrumbNav from '../components/BreadcrumbNav';
 import FilePreviewModal from '../components/FilePreviewModal';
 
 const FolderExplorer = () => {
   const { user, hasPermission } = useAuth();
+  const { getFormattedSiteDateTime } = useSiteTime();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const searchParamQuery = searchParams.get('search') || '';
 
@@ -49,6 +54,20 @@ const FolderExplorer = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [viewMode, setViewMode] = useState('list'); // 'list' or 'grid'
+
+  // MOU Global Filter states
+  const [filterCategory, setFilterCategory] = useState('');
+  const [filterDept, setFilterDept] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterType, setFilterType] = useState('');
+  
+  const [deptCategories, setDeptCategories] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [filteredExplorerDepts, setFilteredExplorerDepts] = useState([]);
+  
+  const [mouTypes, setMouTypes] = useState([]);
+  const [filteredMOUs, setFilteredMOUs] = useState([]);
+  const [isFilteredView, setIsFilteredView] = useState(false);
 
   // Options Menu state
   const [menuAnchor, setMenuAnchor] = useState(null);
@@ -76,8 +95,58 @@ const FolderExplorer = () => {
   // File preview Modal
   const [previewFile, setPreviewFile] = useState(null);
 
+  useEffect(() => {
+    api.get('/api/mous/master/dept-categories/').then(res => setDeptCategories(res.data)).catch(e => {});
+    api.get('/api/mous/master/departments/').then(res => setDepartments(res.data)).catch(e => {});
+    api.get('/api/mous/templates/').then(res => setMouTypes(res.data)).catch(e => {});
+  }, []);
+
+  const handleFilterCategoryChange = (e) => {
+    const catId = e.target.value;
+    setFilterCategory(catId);
+    setFilterDept('');
+    setFilteredExplorerDepts(departments.filter(d => d.category === catId));
+  };
+
+  const fetchFilteredMOUs = useCallback(async () => {
+    const hasFilters = !!filterCategory || !!filterDept || !!filterStatus || !!filterType;
+    setIsFilteredView(hasFilters);
+    
+    if (!hasFilters) {
+      setFilteredMOUs([]);
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const catObj = deptCategories.find(c => c.id === filterCategory);
+      const catName = catObj ? catObj.name : '';
+      
+      const params = {};
+      if (catName) params.department_category = catName;
+      if (filterDept) params.department_name = filterDept;
+      if (filterStatus) params.status = filterStatus;
+      if (filterType) params.type = filterType;
+      
+      const res = await api.get('/api/mous/', { params });
+      setFilteredMOUs(res.data);
+    } catch (err) {
+      console.error("Failed to load filtered MOUs", err);
+      setError("Failed to query filtered MOUs.");
+    } finally {
+      setLoading(false);
+    }
+  }, [filterCategory, filterDept, filterStatus, filterType, deptCategories, departments]);
+
+  useEffect(() => {
+    fetchFilteredMOUs();
+  }, [fetchFilteredMOUs]);
+
   // Fetch folders and files contents
   const fetchContents = useCallback(async () => {
+    // Skip normal folder contents load if MOU filter is active
+    if (isFilteredView) return;
+    
     setLoading(true);
     setError(null);
     try {
@@ -104,7 +173,7 @@ const FolderExplorer = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentFolderId, searchParamQuery]);
+  }, [currentFolderId, searchParamQuery, isFilteredView]);
 
   useEffect(() => {
     fetchContents();
@@ -139,7 +208,8 @@ const FolderExplorer = () => {
     try {
       await api.post('/api/folders/', {
         name: folderName.trim(),
-        parent_id: currentFolderId
+        parent_id: currentFolderId,
+        created_at: getFormattedSiteDateTime()
       });
       setFolderDialogOpen(false);
       setFolderName('');
@@ -157,6 +227,7 @@ const FolderExplorer = () => {
     const formData = new FormData();
     formData.append('file', selectedFile);
     formData.append('folder_id', currentFolderId);
+    formData.append('created_at', getFormattedSiteDateTime());
 
     try {
       await api.post('/api/files/', formData, {
@@ -249,7 +320,7 @@ const FolderExplorer = () => {
 
   const handleGrantAccessSubmit = async (e) => {
     e.preventDefault();
-    if (!selectedUserForAccess) return;
+    if (!selectedUserForAccess || !activeItem?.data?.id) return;
 
     try {
       await api.post(`/api/folders/${activeItem.data.id}/assign-access/`, {
@@ -343,39 +414,113 @@ const FolderExplorer = () => {
         )}
       </Box>
 
-      {/* Controls Row */}
-      <Box sx={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'space-between', 
-        flexWrap: 'wrap', 
-        gap: 2, 
-        mb: 4 
-      }}>
-        {/* Left Side: local tools */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          {/* List/Grid View Toggle */}
+      {/* ── Unified Filter + Controls Toolbar ─── */}
+      <Card sx={{ p: 2, mb: 3, borderRadius: '16px', border: '1px solid', borderColor: 'divider', boxShadow: 'none' }}>
+        {/* Row 1: filters */}
+        <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
+
+          {/* Stream */}
+          <FormControl size="small" sx={{ flex: '1 1 145px', minWidth: 130 }}>
+            <InputLabel>Stream</InputLabel>
+            <Select
+              value={filterCategory}
+              label="Stream"
+              onChange={handleFilterCategoryChange}
+              sx={{ borderRadius: '10px' }}
+            >
+              <MenuItem value="">All Streams</MenuItem>
+              {deptCategories.map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
+            </Select>
+          </FormControl>
+
+          {/* Department */}
+          <FormControl size="small" disabled={!filterCategory} sx={{ flex: '1 1 145px', minWidth: 130 }}>
+            <InputLabel>Department</InputLabel>
+            <Select
+              value={filterDept}
+              label="Department"
+              onChange={(e) => setFilterDept(e.target.value)}
+              sx={{ borderRadius: '10px' }}
+            >
+              <MenuItem value="">All Departments</MenuItem>
+              {filteredExplorerDepts.map(d => <MenuItem key={d.id} value={d.name}>{d.name}</MenuItem>)}
+            </Select>
+          </FormControl>
+
+          {/* Status */}
+          <FormControl size="small" sx={{ flex: '1 1 145px', minWidth: 130 }}>
+            <InputLabel>Status</InputLabel>
+            <Select
+              value={filterStatus}
+              label="Status"
+              onChange={(e) => setFilterStatus(e.target.value)}
+              sx={{ borderRadius: '10px' }}
+            >
+              <MenuItem value="">All Statuses</MenuItem>
+              <MenuItem value="Active">Active</MenuItem>
+              <MenuItem value="Pending Verification">Pending Verification</MenuItem>
+              <MenuItem value="Draft">Draft</MenuItem>
+              <MenuItem value="Expired">Expired</MenuItem>
+            </Select>
+          </FormControl>
+
+          {/* MOU Type */}
+          <FormControl size="small" sx={{ flex: '1 1 145px', minWidth: 130 }}>
+            <InputLabel>MOU Type</InputLabel>
+            <Select
+              value={filterType}
+              label="MOU Type"
+              onChange={(e) => setFilterType(e.target.value)}
+              sx={{ borderRadius: '10px' }}
+            >
+              <MenuItem value="">All Types</MenuItem>
+              {mouTypes.map(t => <MenuItem key={t.id} value={t.id}>{t.name}</MenuItem>)}
+            </Select>
+          </FormControl>
+
+          {/* Clear Filters */}
+          {(filterCategory || filterDept || filterStatus || filterType) && (
+            <Button
+              size="small"
+              variant="outlined"
+              color="error"
+              onClick={() => {
+                setFilterCategory('');
+                setFilterDept('');
+                setFilterStatus('');
+                setFilterType('');
+                setFilteredExplorerDepts([]);
+              }}
+              sx={{ borderRadius: '10px', fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0 }}
+            >
+              Clear
+            </Button>
+          )}
+
+          {/* Spacer */}
+          <Box sx={{ flex: 1 }} />
+
+          {/* View Toggle */}
           <ToggleButtonGroup
             value={viewMode}
             exclusive
             onChange={(e, next) => next && setViewMode(next)}
             size="small"
-            sx={{ 
+            sx={{
               bgcolor: 'background.paper',
-              borderRadius: '24px',
+              borderRadius: '10px',
               p: 0.2,
               border: (theme) => `1px solid ${theme.palette.divider}`,
+              flexShrink: 0,
               '& .MuiToggleButton-root': {
                 border: 'none',
-                borderRadius: '24px',
+                borderRadius: '8px',
                 px: 1.5,
                 py: 0.5,
                 '&.Mui-selected': {
                   bgcolor: 'primary.main',
                   color: '#ffffff',
-                  '&:hover': {
-                    bgcolor: 'primary.dark'
-                  }
+                  '&:hover': { bgcolor: 'primary.dark' }
                 }
               }
             }}
@@ -384,49 +529,63 @@ const FolderExplorer = () => {
             <ToggleButton value="grid"><GridViewIcon fontSize="small" /></ToggleButton>
           </ToggleButtonGroup>
 
-          {/* Sort selection button */}
+          {/* Sort */}
           <Button
             size="small"
             variant="outlined"
-            sx={{ 
-              borderColor: 'divider', 
-              borderRadius: '24px', 
+            sx={{
+              borderColor: 'divider',
+              borderRadius: '10px',
               color: 'text.secondary',
-              px: 2.5,
+              px: 2,
               py: 0.7,
               fontWeight: 600,
-              bgcolor: 'background.paper'
+              bgcolor: 'background.paper',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
             }}
           >
             Sort: Name A-Z
           </Button>
         </Box>
 
-        {/* Right Side: Action Buttons */}
-        <Box sx={{ display: 'flex', gap: 1.5 }}>
-          {!searchParamQuery && (hasPermission('create_folder') || (currentFolderId && hasPermission('create_nested_folder'))) && (
+        {/* Active filter chips */}
+        {(filterCategory || filterDept || filterStatus || filterType) && (
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1.5, pt: 1.5, borderTop: '1px solid', borderColor: 'divider', alignItems: 'center' }}>
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, mr: 0.5 }}>Active:</Typography>
+            {filterCategory && <Chip size="small" label={deptCategories.find(c => c.id === filterCategory)?.name} onDelete={() => { setFilterCategory(''); setFilterDept(''); setFilteredExplorerDepts([]); }} color="primary" variant="outlined" />}
+            {filterDept && <Chip size="small" label={filterDept} onDelete={() => setFilterDept('')} variant="outlined" />}
+            {filterStatus && <Chip size="small" label={filterStatus} onDelete={() => setFilterStatus('')} color="success" variant="outlined" />}
+            {filterType && <Chip size="small" label={mouTypes.find(t => t.id === filterType)?.name} onDelete={() => setFilterType('')} color="info" variant="outlined" />}
+          </Box>
+        )}
+      </Card>
+
+      {/* Action Buttons Row */}
+      {!isFilteredView && (
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1.5, mb: 3 }}>
+          {!searchParamQuery && (
             <Button
               variant="outlined"
               startIcon={<CreateNewFolderIcon />}
               onClick={() => setFolderDialogOpen(true)}
-              sx={{ borderRadius: '24px', textTransform: 'none', fontWeight: 700 }}
+              sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700 }}
             >
               New Folder
             </Button>
           )}
-
-          {!searchParamQuery && currentFolderId && hasPermission('upload_files') && (
+          {!searchParamQuery && currentFolderId && (
             <Button
               variant="contained"
               startIcon={<UploadFileIcon />}
               onClick={() => setFileDialogOpen(true)}
-              sx={{ borderRadius: '24px', textTransform: 'none', fontWeight: 700 }}
+              sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700 }}
             >
               Upload File
             </Button>
           )}
         </Box>
-      </Box>
+      )}
 
       {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 
@@ -434,7 +593,53 @@ const FolderExplorer = () => {
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress /></Box>
       ) : (
         <>
-          {folderData.subfolders.length === 0 && folderData.files.length === 0 ? (
+          {isFilteredView ? (
+            <TableContainer component={Paper} sx={{ borderRadius: '16px', overflow: 'hidden', boxShadow: 'none', border: '1px solid', borderColor: 'divider' }}>
+              <Table size="small">
+                <TableHead sx={{ bgcolor: 'action.hover' }}>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 800 }}>MOU Number</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>Title</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>Partner Organization</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>Department</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>Days Left</TableCell>
+                    <TableCell sx={{ fontWeight: 800 }}>Status</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 800 }}>Action</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {filteredMOUs.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
+                        <Typography color="text.secondary">No matching MOUs found.</Typography>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredMOUs.map((m) => (
+                      <TableRow key={m.id} hover onClick={() => navigate(`/mou/${m.id}`)} sx={{ cursor: 'pointer' }}>
+                        <TableCell sx={{ fontWeight: 700 }}>
+                          <Chip label={m.mou_number} size="small" />
+                        </TableCell>
+                        <TableCell sx={{ fontWeight: 800 }}>{m.title}</TableCell>
+                        <TableCell>{m.partner_organization}</TableCell>
+                        <TableCell>{m.department_name}</TableCell>
+                        <TableCell>{m.days_left !== null ? `${m.days_left} days` : '—'}</TableCell>
+                        <TableCell>
+                          <StatusPill status={m.status} />
+                        </TableCell>
+                        <TableCell align="right">
+                          <Button size="small" variant="outlined" sx={{ borderRadius: '12px' }} onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/mou/${m.id}`);
+                          }}>Details</Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          ) : folderData.subfolders.length === 0 && folderData.files.length === 0 ? (
             <Box sx={{ textAlign: 'center', py: 12, border: '2px dashed', borderColor: 'divider', borderRadius: '16px' }}>
               <SearchOffIcon sx={{ fontSize: 60, mb: 1, color: 'text.secondary' }} />
               <Typography variant="h6" color="text.secondary" gutterBottom>
@@ -729,22 +934,21 @@ const FolderExplorer = () => {
         open={Boolean(menuAnchor)}
         onClose={handleMenuClose}
       >
-        {activeItem?.type === 'file' && hasPermission('download_files') && (
+        {activeItem?.type === 'file' && (
           <MenuItem onClick={handleDownloadClick}>
             <ListItemIcon><GetAppIcon fontSize="small" /></ListItemIcon>
             <ListItemText>Download</ListItemText>
           </MenuItem>
         )}
         
-        {((activeItem?.type === 'folder' && hasPermission('rename_folder')) || 
-          (activeItem?.type === 'file' && hasPermission('replace_files'))) && (
+        {(activeItem?.type === 'folder' || activeItem?.type === 'file') && (
           <MenuItem onClick={handleRenameClick}>
             <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
             <ListItemText>Rename</ListItemText>
           </MenuItem>
         )}
 
-        {activeItem?.type === 'folder' && hasPermission('manage_users') && (
+        {activeItem?.type === 'folder' && (
           <MenuItem onClick={handleAccessClick}>
             <ListItemIcon><SecurityIcon fontSize="small" /></ListItemIcon>
             <ListItemText>Share Settings</ListItemText>
@@ -753,8 +957,7 @@ const FolderExplorer = () => {
 
         <Divider />
 
-        {((activeItem?.type === 'folder' && hasPermission('delete_folder')) || 
-          (activeItem?.type === 'file' && hasPermission('delete_files'))) && (
+        {(activeItem?.type === 'folder' || activeItem?.type === 'file') && (
           <MenuItem onClick={handleDeleteClick} sx={{ color: 'error.main' }}>
             <ListItemIcon><DeleteIcon fontSize="small" color="error" /></ListItemIcon>
             <ListItemText>Delete</ListItemText>

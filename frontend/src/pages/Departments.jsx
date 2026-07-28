@@ -155,7 +155,7 @@ const Departments = () => {
                     fullWidth
                     variant="outlined"
                     endIcon={<ArrowForwardIcon />}
-                    onClick={() => navigate(`/mou-repository?department=${dept.name.split(' ')[0]}`)}
+                    onClick={() => navigate(`/explorer?search=${encodeURIComponent(dept.name.split(' ')[0])}`)}
                     sx={{ borderRadius: '12px', fontWeight: 700 }}
                   >
                     View Department MOUs

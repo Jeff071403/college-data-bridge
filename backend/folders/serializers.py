@@ -40,7 +40,7 @@ class FolderSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'parent_id', 'created_by', 
             'created_at', 'updated_at', 'subfolder_count', 
-            'file_count', 'path'
+            'file_count', 'path', 'google_folder_id'
         ]
         read_only_fields = ['created_by', 'created_at', 'updated_at']
 

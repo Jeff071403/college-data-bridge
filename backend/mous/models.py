@@ -90,6 +90,47 @@ class MOU(models.Model):
         today = date.today()
         return (self.expiry_date - today).days
 
+    def save(self, *args, **kwargs):
+        is_new = self.pk is None
+        super().save(*args, **kwargs)
+        if is_new and not self.department:
+            from folders.models import Folder
+            from services import drive_service
+            
+            # 1. Get or create parent department folder at root level
+            dept_name = self.department_name or "General"
+            parent_dept_folder, _ = Folder.objects.get_or_create(
+                name=dept_name,
+                parent=None,
+                defaults={'created_by': self.created_by}
+            )
+            import logging
+            logger = logging.getLogger(__name__)
+            if not parent_dept_folder.google_folder_id:
+                try:
+                    google_id = drive_service.create_folder(parent_dept_folder.name, None)
+                    parent_dept_folder.google_folder_id = google_id
+                    parent_dept_folder.save(update_fields=['google_folder_id'])
+                except Exception as drive_err:
+                    logger.warning(f"Google Drive folder creation skipped for '{parent_dept_folder.name}': {drive_err}")
+            
+            # 2. Create specific MOU subfolder inside the department folder
+            mou_folder = Folder.objects.create(
+                name=self.title,
+                parent=parent_dept_folder,
+                created_by=self.created_by
+            )
+            try:
+                google_id = drive_service.create_folder(mou_folder.name, parent_dept_folder.google_folder_id)
+                mou_folder.google_folder_id = google_id
+                mou_folder.save(update_fields=['google_folder_id'])
+            except Exception as drive_err:
+                logger.warning(f"Google Drive subfolder creation skipped for '{mou_folder.name}': {drive_err}")
+                
+            # 3. Update department FK on self
+            self.department = mou_folder
+            super().save(update_fields=['department'])
+
     def __str__(self):
         return f"{self.mou_number} - {self.title} ({self.status})"
 
@@ -112,3 +153,161 @@ class MOURenewal(models.Model):
     renewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     renewed_at = models.DateTimeField(auto_now_add=True)
     notes = models.TextField(blank=True, null=True)
+
+class MOUShare(models.Model):
+    PERMISSION_CHOICES = [
+        ('View Only', 'View Only'),
+        ('Upload Only', 'Upload Only'),
+        ('Edit', 'Edit'),
+        ('Full Access', 'Full Access'),
+    ]
+
+    STATUS_CHOICES = [
+        ('Shared', 'Shared'),
+        ('Viewed', 'Viewed'),
+        ('Pending Upload', 'Pending Upload'),
+        ('Signed MOU Uploaded', 'Signed MOU Uploaded'),
+        ('Verified by Legal Cell', 'Verified by Legal Cell'),
+        ('Completed', 'Completed'),
+    ]
+
+    mou = models.ForeignKey(MOU, on_delete=models.CASCADE, related_name='shares')
+    department = models.ForeignKey(Folder, on_delete=models.CASCADE, related_name='mou_shares', null=True, blank=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='individual_shares', null=True, blank=True)
+    shared_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='shares_created')
+    permission = models.CharField(max_length=50, choices=PERMISSION_CHOICES, default='View Only')
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='Shared')
+    shared_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('mou', 'department', 'user')
+
+class DepartmentSubmission(models.Model):
+    STATUS_CHOICES = [
+        ('Pending Verification', 'Pending Verification'),
+        ('Verified', 'Verified'),
+        ('Rejected', 'Rejected'),
+    ]
+
+    mou = models.ForeignKey(MOU, on_delete=models.CASCADE, related_name='department_submissions')
+    department = models.ForeignKey(Folder, on_delete=models.CASCADE, related_name='submissions', null=True, blank=True)
+    signed_file = models.ForeignKey(File, on_delete=models.SET_NULL, null=True, blank=True, related_name='department_submissions_signed')
+    
+    # Metadata fields
+    signed_date = models.DateField()
+    mou_month = models.CharField(max_length=20)
+    mou_year = models.IntegerField()
+    summary = models.TextField()
+    purpose = models.TextField()
+    benefits = models.JSONField(default=list)
+    remarks = models.TextField(blank=True, null=True)
+    
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    
+    # Legal Cell Review
+    review_status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='Pending Verification')
+    reviewer_comments = models.TextField(blank=True, null=True)
+
+
+class TemplateCategory(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.name
+
+
+class OrganizationType(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.name
+
+
+class CollaborationType(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.name
+
+
+class DocumentType(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.name
+
+
+class Tag(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.name
+
+
+class DepartmentCategory(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.name
+
+
+class Department(models.Model):
+    name = models.CharField(max_length=100)
+    category = models.ForeignKey(DepartmentCategory, on_delete=models.CASCADE, related_name='departments')
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        unique_together = ('name', 'category')
+
+    def __str__(self):
+        return f"{self.name} ({self.category.name})"
+
+
+class TemplateCollection(models.Model):
+    template_name = models.CharField(max_length=255)
+    category = models.ForeignKey(TemplateCategory, on_delete=models.PROTECT, related_name='collections')
+    organization_type = models.ForeignKey(OrganizationType, on_delete=models.PROTECT, related_name='collections')
+    collaboration_type = models.ForeignKey(CollaborationType, on_delete=models.PROTECT, related_name='collections')
+    department_category = models.ForeignKey(DepartmentCategory, on_delete=models.PROTECT, related_name='collections')
+    department = models.ForeignKey(Department, on_delete=models.PROTECT, related_name='collections')
+    description = models.TextField(blank=True, null=True)
+    tags = models.ManyToManyField(Tag, blank=True, related_name='collections')
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_collections')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.template_name
+
+
+class TemplateDocument(models.Model):
+    STATUS_CHOICES = (
+        ('Draft', 'Draft'),
+        ('Active', 'Active'),
+        ('Archived', 'Archived'),
+    )
+    template_collection = models.ForeignKey(TemplateCollection, on_delete=models.CASCADE, related_name='documents')
+    document_name = models.CharField(max_length=255)
+    document_type = models.ForeignKey(DocumentType, on_delete=models.PROTECT, related_name='documents')
+    file_path = models.FileField(upload_to='template_pdfs/', null=True, blank=True)
+    google_file_id = models.CharField(max_length=255, blank=True, null=True)
+    version = models.CharField(max_length=50, default="1.0")
+    effective_date = models.DateField(null=True, blank=True)
+    expiry_date = models.DateField(null=True, blank=True)
+    revision_date = models.DateField(null=True, blank=True)
+    remarks = models.TextField(blank=True, null=True)
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='uploaded_template_documents')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='Active')
+
+    def __str__(self):
+        return f"{self.document_name} - v{self.version}"
+
+

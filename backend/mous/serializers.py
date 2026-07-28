@@ -1,5 +1,9 @@
 from rest_framework import serializers
-from .models import MOUTemplate, MOU, MOUDocument, MOURenewal
+from .models import (
+    MOUTemplate, MOU, MOUDocument, MOURenewal,
+    TemplateCategory, OrganizationType, CollaborationType, DocumentType, Tag,
+    DepartmentCategory, Department, TemplateCollection, TemplateDocument
+)
 from files.serializers import FileSerializer
 from folders.serializers import FolderSerializer
 from users.serializers import CustomUserSerializer
@@ -32,6 +36,10 @@ class MOUSerializer(serializers.ModelSerializer):
     signed_mou_details = FileSerializer(source='signed_mou', read_only=True)
     days_left = serializers.SerializerMethodField()
     documents = MOUDocumentSerializer(many=True, read_only=True)
+    
+    shares_list = serializers.SerializerMethodField()
+    user_share_details = serializers.SerializerMethodField()
+    submissions = serializers.SerializerMethodField()
 
     class Meta:
         model = MOU
@@ -39,3 +47,126 @@ class MOUSerializer(serializers.ModelSerializer):
 
     def get_days_left(self, obj):
         return obj.days_remaining()
+
+    def get_shares_list(self, obj):
+        return [{
+            'id': s.id,
+            'department_id': s.department_id,
+            'department_name': s.department.name if s.department else None,
+            'user_email': s.user.email if s.user else None,
+            'permission': s.permission,
+            'status': s.status,
+            'shared_at': s.shared_at
+        } for s in obj.shares.all()]
+
+    def get_user_share_details(self, obj):
+        request = self.context.get('request')
+        if request and request.user and request.user.is_authenticated:
+            user = request.user
+            shares = obj.shares.all()
+            if user.department:
+                ds = shares.filter(department__name=user.department).first()
+                if ds:
+                    return {'permission': ds.permission, 'status': ds.status}
+            us = shares.filter(user=user).first()
+            if us:
+                return {'permission': us.permission, 'status': us.status}
+        return None
+
+    def get_submissions(self, obj):
+        request = self.context.get('request')
+        is_admin = False
+        if request and request.user and request.user.is_authenticated:
+            is_admin = request.user.role and request.user.role.name in ["Super Admin", "Admin", "Lawyer / MOU Administrator"]
+            
+        subs = obj.department_submissions.all()
+        if not is_admin and request and request.user and request.user.department:
+            subs = subs.filter(department__name=request.user.department)
+            
+        return [{
+            'id': s.id,
+            'signed_file_id': s.signed_file_id,
+            'signed_file_name': s.signed_file.name if s.signed_file else None,
+            'signed_date': s.signed_date,
+            'mou_month': s.mou_month,
+            'mou_year': s.mou_year,
+            'summary': s.summary,
+            'purpose': s.purpose,
+            'benefits': s.benefits,
+            'remarks': s.remarks,
+            'uploaded_by': s.uploaded_by.name if s.uploaded_by else None,
+            'uploaded_at': s.uploaded_at,
+            'review_status': s.review_status,
+            'reviewer_comments': s.reviewer_comments
+        } for s in subs]
+
+
+class TemplateCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TemplateCategory
+        fields = '__all__'
+
+
+class OrganizationTypeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OrganizationType
+        fields = '__all__'
+
+
+class CollaborationTypeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CollaborationType
+        fields = '__all__'
+
+
+class DocumentTypeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DocumentType
+        fields = '__all__'
+
+
+class TagSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tag
+        fields = '__all__'
+
+
+class DepartmentCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DepartmentCategory
+        fields = '__all__'
+
+
+class DepartmentSerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source='category.name', read_only=True)
+
+    class Meta:
+        model = Department
+        fields = ['id', 'name', 'category', 'category_name', 'is_active']
+
+
+class TemplateDocumentSerializer(serializers.ModelSerializer):
+    document_type_name = serializers.CharField(source='document_type.name', read_only=True)
+    uploaded_by_name = serializers.CharField(source='uploaded_by.name', read_only=True)
+
+    class Meta:
+        model = TemplateDocument
+        fields = '__all__'
+
+
+class TemplateCollectionSerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    organization_type_name = serializers.CharField(source='organization_type.name', read_only=True)
+    collaboration_type_name = serializers.CharField(source='collaboration_type.name', read_only=True)
+    department_category_name = serializers.CharField(source='department_category.name', read_only=True)
+    department_name = serializers.CharField(source='department.name', read_only=True)
+    created_by_name = serializers.CharField(source='created_by.name', read_only=True)
+    tags_details = TagSerializer(source='tags', many=True, read_only=True)
+    documents = TemplateDocumentSerializer(many=True, read_only=True)
+    document_count = serializers.IntegerField(source='documents.count', read_only=True)
+
+    class Meta:
+        model = TemplateCollection
+        fields = '__all__'
+
+
