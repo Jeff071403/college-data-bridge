@@ -21,6 +21,15 @@ def get_user_permissions(user):
             RolePermission.objects.filter(role=user.role)
             .values_list('permission__codename', flat=True)
         )
+    else:
+        # Fallback to standard 'User' role permissions if no explicit role assigned
+        from roles.models import Role
+        user_role = Role.objects.filter(name="User").first()
+        if user_role:
+            role_perms = set(
+                RolePermission.objects.filter(role=user_role)
+                .values_list('permission__codename', flat=True)
+            )
 
     user_overrides = UserPermission.objects.filter(user=user)
     granted_overrides = set(
