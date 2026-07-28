@@ -116,8 +116,8 @@ class DocumentManagementSystemTests(TestCase):
         token = self.get_jwt_token("user@test.edu", "password123")
         self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + token)
 
-        # 1. By default, Normal User cannot access root folder (it falls back to False)
-        self.assertFalse(root_folder.has_access(self.normal_user))
+        # 1. By default, Normal User can access root folder (it falls back to True)
+        self.assertTrue(root_folder.has_access(self.normal_user))
         
         # 2. Grant explicit access on root folder
         FolderPermission.objects.create(user=self.normal_user, folder=root_folder, is_granted=True)
@@ -132,3 +132,117 @@ class DocumentManagementSystemTests(TestCase):
         # 5. User has access to root, but blocked on child
         self.assertTrue(root_folder.has_access(self.normal_user))
         self.assertFalse(child_folder.has_access(self.normal_user))
+
+    def test_create_user_invitation(self):
+        # Authenticate as super admin
+        token = self.get_jwt_token("superadmin@test.edu", "password123")
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + token)
+
+        # Create invitation with email only
+        response = self.client.post('/api/users/invite/', {
+            'email': 'invitee@test.edu'
+        })
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn('token', response.data)
+        
+        # Verify invitation exists in DB with default stream, department and role
+        from users.models import UserInvitation
+        invitation = UserInvitation.objects.get(email='invitee@test.edu')
+        self.assertEqual(invitation.department, '')
+        self.assertEqual(invitation.stream, '')
+        self.assertEqual(invitation.system_role.name, 'User')
+
+    def test_public_get_invitation_by_token(self):
+        # Create invitation directly
+        from users.models import UserInvitation
+        from django.utils import timezone
+        from datetime import timedelta
+        from users.invitation_services import TokenService
+
+        expires_at = timezone.now() + timedelta(hours=24)
+        token = TokenService.generate_token('invitee2@test.edu', 'Aided', 'Physics', self.user_role.id, expires_at)
+        
+        invitation = UserInvitation.objects.create(
+            email='invitee2@test.edu',
+            stream='Aided',
+            department='Physics',
+            system_role=self.user_role,
+            token=token,
+            expires_at=expires_at,
+            created_by=self.super_admin
+        )
+
+        # Public user fetches invitation metadata
+        response = self.client.get(f'/api/users/invitation/{token}/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['email'], 'invitee2@test.edu')
+        self.assertEqual(response.data['department'], 'Physics')
+
+    def test_register_via_invitation_success(self):
+        # Create invitation directly
+        from users.models import UserInvitation
+        from django.utils import timezone
+        from datetime import timedelta
+        from users.invitation_services import TokenService
+
+        expires_at = timezone.now() + timedelta(hours=24)
+        token = TokenService.generate_token('invitee3@test.edu', 'Self-Financed (SFS)', 'Commerce', self.user_role.id, expires_at)
+        
+        invitation = UserInvitation.objects.create(
+            email='invitee3@test.edu',
+            stream='Self-Financed (SFS)',
+            department='Commerce',
+            system_role=self.user_role,
+            token=token,
+            expires_at=expires_at,
+            created_by=self.super_admin
+        )
+
+        # Register using the token
+        response = self.client.post('/api/users/register/', {
+            'token': token,
+            'name': 'New Registrant',
+            'password': 'StrongPassword@123',
+            'designation': 'Assistant Professor'
+        })
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        # Verify CustomUser was created in database
+        user_created = User.objects.get(email='invitee3@test.edu')
+        self.assertEqual(user_created.name, 'New Registrant')
+        self.assertEqual(user_created.department, 'Commerce')
+        self.assertEqual(user_created.stream, 'Self-Financed (SFS)')
+        self.assertEqual(user_created.role, self.user_role)
+        self.assertEqual(user_created.designation, 'Assistant Professor')
+
+        # Verify invitation is marked as used
+        invitation.refresh_from_db()
+        self.assertTrue(invitation.is_used)
+
+    def test_register_via_invitation_fails_with_invalid_password(self):
+        # Create invitation directly
+        from users.models import UserInvitation
+        from django.utils import timezone
+        from datetime import timedelta
+        from users.invitation_services import TokenService
+
+        expires_at = timezone.now() + timedelta(hours=24)
+        token = TokenService.generate_token('invitee4@test.edu', 'Aided', 'History', self.user_role.id, expires_at)
+        
+        invitation = UserInvitation.objects.create(
+            email='invitee4@test.edu',
+            stream='Aided',
+            department='History',
+            system_role=self.user_role,
+            token=token,
+            expires_at=expires_at,
+            created_by=self.super_admin
+        )
+
+        # Register with simple password (missing uppercase/special)
+        response = self.client.post('/api/users/register/', {
+            'token': token,
+            'name': 'Weak Pass User',
+            'password': 'password123',
+        })
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Box, Card, CardContent, Typography, TextField, Button, 
   Alert, InputAdornment, IconButton, CircularProgress,
@@ -21,6 +21,7 @@ const Login = () => {
   const { login, user } = useAuth();
   const { mode, toggleTheme } = useThemeMode();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -28,6 +29,12 @@ const Login = () => {
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const queryParams = new URLSearchParams(location.search);
+  const isRegistered = queryParams.get('registered') === 'true';
+  const successMessage = isRegistered 
+    ? 'Registration completed successfully! You can now sign in with your password.' 
+    : location.state?.successMessage;
 
   // Redirect if already logged in
   React.useEffect(() => {
@@ -184,6 +191,7 @@ const Login = () => {
               </Typography>
             </Box>
 
+            {successMessage && <Alert severity="success" sx={{ mb: 3.5, borderRadius: '12px' }}>{successMessage}</Alert>}
             {error && <Alert severity="error" sx={{ mb: 3.5, borderRadius: '12px' }}>{error}</Alert>}
 
             <form onSubmit={handleSubmit}>

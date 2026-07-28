@@ -144,7 +144,9 @@ class FolderViewSet(viewsets.ModelViewSet):
                     parent_google_id = parent_folder.google_folder_id
 
                 # Create folder on Google Drive (Strict: Google Drive is required)
+                logger.info(f"Triggering folder creation on Google Drive. Folder name: '{folder.name}', parent Google Folder ID: '{parent_google_id}'...")
                 google_folder_id = drive_service.create_folder(folder.name, parent_google_id)
+                logger.info(f"Folder created successfully on Google Drive. ID: '{google_folder_id}'")
                 folder.google_folder_id = google_folder_id
                 folder.save(update_fields=['google_folder_id'])
 
@@ -161,6 +163,7 @@ class FolderViewSet(viewsets.ModelViewSet):
                 log_activity(request.user, f"Created folder '{folder.name}'", "folders", request)
                 notify_admins("Folder Created", f"Folder '{folder.name}' was created by {request.user.name}.", metadata={'action': 'folder_created', 'folder_id': folder.id, 'folder_name': folder.name})
         except Exception as e:
+            logger.exception(f"Folder creation view failed for '{folder.name}': {e}")
             return Response({"detail": f"Google Drive folder creation failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         headers = self.get_success_headers(serializer.data)
@@ -195,12 +198,15 @@ class FolderViewSet(viewsets.ModelViewSet):
                 
                 # Sync rename to Google Drive
                 if updated_folder.google_folder_id and old_name != updated_folder.name:
+                    logger.info(f"Syncing folder rename to Google Drive. Folder ID: '{updated_folder.google_folder_id}', old name: '{old_name}', new name: '{updated_folder.name}'...")
                     drive_service.rename_file(updated_folder.google_folder_id, updated_folder.name)
+                    logger.info("Rename sync successful.")
 
                 # Log & Notify
                 log_activity(request.user, f"Renamed folder from '{old_name}' to '{updated_folder.name}'", "folders", request)
                 notify_admins("Folder Renamed", f"Folder '{old_name}' was renamed to '{updated_folder.name}' by {request.user.name}.", metadata={'action': 'folder_renamed', 'folder_id': updated_folder.id, 'folder_name': updated_folder.name})
         except Exception as e:
+            logger.exception(f"Folder rename failed for folder '{old_name}' (ID: {folder.id}) to '{updated_folder.name}': {e}")
             return Response({"detail": f"Google Drive folder rename failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
         return Response(FolderSerializer(updated_folder).data)
@@ -231,14 +237,20 @@ class FolderViewSet(viewsets.ModelViewSet):
         try:
             with transaction.atomic():
                 if google_folder_id:
-                    drive_service.delete_file(google_folder_id)
+                    logger.info(f"Attempting to delete folder from Google Drive. Folder ID: '{google_folder_id}'...")
+                    try:
+                        drive_service.delete_file(google_folder_id)
+                        logger.info("Folder deleted successfully from Google Drive.")
+                    except Exception as drive_err:
+                        logger.warning(f"Failed to delete folder '{google_folder_id}' on Google Drive: {drive_err}")
                 self.perform_destroy(folder)
                     
                 # Log & Notify
                 log_activity(request.user, f"Deleted folder '{folder_name}'", "folders", request)
                 notify_admins("Folder Deleted", f"Folder '{folder_name}' was deleted by {request.user.name}.", metadata={'action': 'folder_deleted', 'folder_name': folder_name})
         except Exception as e:
-            return Response({"detail": f"Google Drive folder deletion failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.exception(f"Folder deletion failed for folder '{folder_name}' (ID: {folder.id}): {e}")
+            return Response({"detail": f"Database folder deletion failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -349,7 +361,84 @@ class FolderViewSet(viewsets.ModelViewSet):
             
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    def sync_drive_directory(self, parent_google_id, parent_folder_obj, user):
+        """
+        Fetches live items from Google Drive under parent_google_id.
+        Creates missing Folder and File database models.
+        """
+        if not parent_google_id:
+            return
+        
+        from files.models import File
+        try:
+            # Fetch live list from Google Drive
+            live_items = drive_service.list_folder_contents(parent_google_id)
+            
+            # Map of existing child folders: google_folder_id -> Folder
+            existing_folders = Folder.objects.filter(parent=parent_folder_obj)
+            existing_folder_map = {f.google_folder_id: f for f in existing_folders if f.google_folder_id}
+            existing_folder_name_map = {f.name: f for f in existing_folders if not f.google_folder_id}
 
+            # Map of existing files: google_file_id -> File
+            if parent_folder_obj:
+                existing_files = File.objects.filter(folder=parent_folder_obj)
+                existing_file_map = {f.google_file_id: f for f in existing_files if f.google_file_id}
+                existing_file_name_map = {f.name: f for f in existing_files if not f.google_file_id}
+            else:
+                existing_file_map = {}
+                existing_file_name_map = {}
+
+            for item in live_items:
+                mime_type = item.get('mimeType')
+                item_id = item.get('id')
+                item_name = item.get('name')
+                
+                if mime_type == 'application/vnd.google-apps.folder':
+                    # Folder synchronization
+                    if item_id in existing_folder_map:
+                        continue
+                    elif item_name in existing_folder_name_map:
+                        f = existing_folder_name_map[item_name]
+                        f.google_folder_id = item_id
+                        f.save(update_fields=['google_folder_id'])
+                    else:
+                        Folder.objects.create(
+                            name=item_name,
+                            parent=parent_folder_obj,
+                            google_folder_id=item_id,
+                            created_by=user
+                        )
+                else:
+                    # File synchronization (files belong to folders in DB, so we skip if parent_folder_obj is None)
+                    if not parent_folder_obj:
+                        continue
+                    
+                    if item_id in existing_file_map:
+                        continue
+                    elif item_name in existing_file_name_map:
+                        f = existing_file_name_map[item_name]
+                        f.google_file_id = item_id
+                        f.web_view_link = item.get('webViewLink')
+                        f.web_content_link = item.get('webContentLink')
+                        f.size = int(item.get('size', 0)) if item.get('size') else 0
+                        f.file_size = f.size
+                        f.mime_type = mime_type
+                        f.save(update_fields=['google_file_id', 'web_view_link', 'web_content_link', 'size', 'file_size', 'mime_type'])
+                    else:
+                        File.objects.create(
+                            name=item_name,
+                            size=int(item.get('size', 0)) if item.get('size') else 0,
+                            file_size=int(item.get('size', 0)) if item.get('size') else 0,
+                            file_type=mime_type or "application/octet-stream",
+                            mime_type=mime_type,
+                            folder=parent_folder_obj,
+                            uploaded_by=user,
+                            google_file_id=item_id,
+                            web_view_link=item.get('webViewLink'),
+                            web_content_link=item.get('webContentLink')
+                        )
+        except Exception as e:
+            logger.warning(f"Live Google Drive sync failed: {e}")
 
     @action(detail=True, methods=['get'])
     def contents(self, request, pk=None):
@@ -366,9 +455,9 @@ class FolderViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # Sync subfolder with Google Drive
+        # Trigger sync from Google Drive
         if folder.google_folder_id:
-            sync_drive_directory(parent_google_id=folder.google_folder_id, parent_folder_obj=folder, user=request.user)
+            self.sync_drive_directory(folder.google_folder_id, folder, request.user)
 
         # Subfolders access filter
         subfolders = folder.children.all().order_by('name')
@@ -392,8 +481,11 @@ class FolderViewSet(viewsets.ModelViewSet):
         Lists folders and files at the root level (no parent).
         Fetches live items from Google Drive root folder first.
         """
-        # Sync with Google Drive root folder
-        sync_drive_directory(parent_google_id=None, parent_folder_obj=None, user=request.user)
+        # Trigger sync from Google Drive using Root ID
+        from django.conf import settings
+        root_id = getattr(settings, 'GOOGLE_DRIVE_ROOT_FOLDER_ID', None)
+        if root_id:
+            self.sync_drive_directory(root_id, None, request.user)
 
         # Get folders at root level
         root_folders = Folder.objects.filter(parent=None).order_by('name')

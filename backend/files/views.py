@@ -61,12 +61,29 @@ class FileViewSet(viewsets.ModelViewSet):
         folder_id = request.data.get('folder_id')
         uploaded_file = request.FILES.get('file')
 
-        if not folder_id:
-            return Response({"folder_id": ["This field is required."]}, status=status.HTTP_400_BAD_REQUEST)
         if not uploaded_file:
             return Response({"file": ["No file was uploaded."]}, status=status.HTTP_400_BAD_REQUEST)
 
-        folder = get_object_or_404(Folder, id=folder_id)
+        if not folder_id or folder_id == 'null' or folder_id == 'undefined':
+            # Find or create a designated "General" root folder (parent=None)
+            folder = Folder.objects.filter(name="General", parent=None).first()
+            if not folder:
+                drive_root_id = getattr(settings, 'GOOGLE_DRIVE_ROOT_FOLDER_ID', None)
+                google_id = None
+                try:
+                    if drive_root_id:
+                        google_id = drive_service.create_folder("General", drive_root_id)
+                except Exception as e:
+                    logger.warning(f"Failed to create General folder on Google Drive: {e}")
+                
+                folder = Folder.objects.create(
+                    name="General",
+                    parent=None,
+                    google_folder_id=google_id,
+                    created_by=request.user
+                )
+        else:
+            folder = get_object_or_404(Folder, id=folder_id)
 
         # Check user access to parent folder
         if not folder.has_access(request.user):
@@ -104,12 +121,14 @@ class FileViewSet(viewsets.ModelViewSet):
                 )
 
                 # Mandatory Google Drive Upload
+                logger.info(f"Triggering upload to Google Drive for file '{name}' under folder '{folder.name}' (Google Folder ID: {folder.google_folder_id})...")
                 drive_metadata = drive_service.upload_file(
                     uploaded_file,
                     name,
                     file_type,
                     folder.google_folder_id
                 )
+                logger.info(f"Upload successful. Received metadata: {drive_metadata}")
                 file_instance.google_file_id = drive_metadata['id']
                 file_instance.mime_type = drive_metadata['mimeType']
                 file_instance.file_size = drive_metadata['size']
@@ -133,6 +152,7 @@ class FileViewSet(viewsets.ModelViewSet):
                 log_activity(request.user, f"Uploaded file '{name}' to folder '{folder.name}'", "files", request)
                 notify_admins("File Uploaded", f"File '{name}' was uploaded to '{folder.name}' by {request.user.name}.", metadata={'action': 'file_uploaded', 'file_id': file_instance.id, 'file_name': file_instance.name, 'folder_id': folder.id, 'folder_name': folder.name})
         except Exception as e:
+            logger.exception(f"File upload view failed for '{name}' in folder '{folder.name}': {e}")
             return Response({"detail": f"Google Drive file upload failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response(FileSerializer(file_instance, context={'request': request}).data, status=status.HTTP_201_CREATED)
@@ -163,10 +183,13 @@ class FileViewSet(viewsets.ModelViewSet):
 
                 # Sync rename to Google Drive
                 if file_instance.google_file_id:
+                    logger.info(f"Syncing file rename to Google Drive. File ID: '{file_instance.google_file_id}', new name: '{new_name}'...")
                     drive_service.rename_file(file_instance.google_file_id, new_name)
+                    logger.info("Rename sync successful.")
 
                 log_activity(request.user, f"Renamed file from '{old_name}' to '{new_name}'", "files", request)
         except Exception as e:
+            logger.exception(f"File rename failed for file '{old_name}' (ID: {file_instance.id}) to '{new_name}': {e}")
             return Response({"detail": f"Rename sync with Google Drive failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response(FileSerializer(file_instance, context={'request': request}).data)
@@ -191,15 +214,22 @@ class FileViewSet(viewsets.ModelViewSet):
             with transaction.atomic():
                 # Delete main file from Google Drive first
                 if google_file_id:
-                    drive_service.delete_file(google_file_id)
+                    logger.info(f"Attempting to delete main file from Google Drive. File ID: '{google_file_id}'...")
+                    try:
+                        drive_service.delete_file(google_file_id)
+                        logger.info("Main file deleted successfully from Google Drive.")
+                    except Exception as drive_err:
+                        logger.warning(f"Failed to delete file '{google_file_id}' on Google Drive: {drive_err}")
 
                 # Delete all previous file versions from Google Drive
                 for version in file_instance.versions.all():
                     if version.google_file_id:
+                        logger.info(f"Attempting to delete file version {version.version_number} from Google Drive. File ID: '{version.google_file_id}'...")
                         try:
                             drive_service.delete_file(version.google_file_id)
-                        except Exception:
-                            pass
+                            logger.info(f"Version {version.version_number} deleted successfully from Google Drive.")
+                        except Exception as version_err:
+                            logger.warning(f"Failed to delete file version '{version.google_file_id}' on Google Drive: {version_err}")
 
                 # Delete local database record
                 file_instance.delete()
@@ -208,7 +238,8 @@ class FileViewSet(viewsets.ModelViewSet):
                 log_activity(request.user, f"Deleted file '{name}' from folder '{folder_name}'", "files", request)
                 notify_admins("File Deleted", f"File '{name}' was deleted from '{folder_name}' by {request.user.name}.", metadata={'action': 'file_deleted', 'file_name': name, 'folder_name': folder_name})
         except Exception as e:
-            return Response({"detail": f"Deletion sync with Google Drive failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.exception(f"File deletion failed for file '{name}' (ID: {file_instance.id}): {e}")
+            return Response({"detail": f"Database file deletion failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -349,12 +380,14 @@ class FileViewSet(viewsets.ModelViewSet):
                 )
 
                 # 2. Upload new version file to Google Drive under the parent folder
+                logger.info(f"Triggering replacement file upload to Google Drive. File: '{name}', folder: '{file_instance.folder.name}' (Google Folder ID: {file_instance.folder.google_folder_id})...")
                 drive_metadata = drive_service.upload_file(
                     uploaded_file, 
                     name, 
                     file_type, 
                     file_instance.folder.google_folder_id
                 )
+                logger.info(f"Replacement file upload successful. Metadata: {drive_metadata}")
 
                 # 3. Update File instance with new info
                 file_instance.name = name
@@ -386,6 +419,7 @@ class FileViewSet(viewsets.ModelViewSet):
                 log_activity(request.user, f"Replaced file '{file_instance.name}' (New Version: v{file_instance.version_number})", "files", request)
                 notify_admins("File Updated", f"File '{file_instance.name}' was replaced with version {file_instance.version_number} by {request.user.name}.", metadata={'action': 'file_replaced', 'file_id': file_instance.id, 'file_name': file_instance.name, 'folder_id': file_instance.folder.id, 'folder_name': file_instance.folder.name})
         except Exception as e:
+            logger.exception(f"File replacement failed for file '{file_instance.name}' (ID: {file_instance.id}): {e}")
             return Response({"detail": f"File replacement with Google Drive failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response(FileSerializer(file_instance, context={'request': request}).data)
@@ -440,7 +474,9 @@ class FileViewSet(viewsets.ModelViewSet):
 
                     # Move file in Google Drive
                     if file_instance.google_file_id and new_parent.google_folder_id:
+                        logger.info(f"Syncing file move to Google Drive. File ID: '{file_instance.google_file_id}' to target folder ID: '{new_parent.google_folder_id}'...")
                         drive_service.move_file(file_instance.google_file_id, new_parent.google_folder_id)
+                        logger.info("File move sync successful.")
 
                     # Update database reference
                     file_instance.folder = new_parent
@@ -463,7 +499,9 @@ class FileViewSet(viewsets.ModelViewSet):
 
                     # Move folder in Google Drive
                     if folder_instance.google_folder_id and new_parent.google_folder_id:
+                        logger.info(f"Syncing folder move to Google Drive. Folder ID: '{folder_instance.google_folder_id}' to target parent ID: '{new_parent.google_folder_id}'...")
                         drive_service.move_file(folder_instance.google_folder_id, new_parent.google_folder_id)
+                        logger.info("Folder move sync successful.")
 
                     # Update database reference
                     folder_instance.parent = new_parent
@@ -474,4 +512,5 @@ class FileViewSet(viewsets.ModelViewSet):
                 else:
                     return Response({"item_type": ["Invalid value. Must be 'file' or 'folder'."]}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
+            logger.exception(f"Item move failed (Item: {item_type}, ID: {item_id}) to new parent ID {new_parent_id}: {e}")
             return Response({"detail": f"Move sync with Google Drive failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

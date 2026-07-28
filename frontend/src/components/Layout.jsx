@@ -237,16 +237,28 @@ const Layout = ({ children }) => {
           opacity: isCollapsed ? 0 : 1,
           transition: 'max-width 0.28s cubic-bezier(0.22,1,0.36,1), opacity 0.22s ease',
           whiteSpace: 'nowrap',
+          display: 'flex',
+          flexDirection: 'column',
         }}>
           <Typography sx={{
             fontWeight: 800,
-            fontSize: '1.05rem',
-            letterSpacing: '0.3px',
+            fontSize: '0.95rem',
+            letterSpacing: '0.5px',
             background: 'linear-gradient(135deg, #4F46E5, #7C3AED)',
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
+            lineHeight: 1.2,
           }}>
-            MOU DocHub
+            MCC LEGAL
+          </Typography>
+          <Typography variant="caption" sx={{
+            fontWeight: 600,
+            letterSpacing: '0.5px',
+            fontSize: '0.75rem',
+            color: 'text.secondary',
+            lineHeight: 1.2,
+          }}>
+            Documents
           </Typography>
         </Box>
 

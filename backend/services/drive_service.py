@@ -4,6 +4,7 @@ from django.conf import settings
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
+from googleapiclient.errors import HttpError
 
 import os
 
@@ -13,6 +14,10 @@ def get_service_account_info():
     """Builds service account credentials dictionary directly from environment variables."""
     private_key = getattr(settings, 'GOOGLE_DRIVE_PRIVATE_KEY', '') or os.environ.get('GOOGLE_DRIVE_PRIVATE_KEY', '')
     if private_key:
+        if private_key.startswith('"') and private_key.endswith('"'):
+            private_key = private_key[1:-1]
+        elif private_key.startswith("'") and private_key.endswith("'"):
+            private_key = private_key[1:-1]
         private_key = private_key.replace('\\n', '\n')
     
     return {
@@ -60,7 +65,7 @@ def folder_exists(folder_id):
         return False
     try:
         service = authenticate()
-        service.files().get(fileId=folder_id, fields='id').execute()
+        service.files().get(fileId=folder_id, fields='id', supportsAllDrives=True).execute()
         return True
     except Exception:
         return False
@@ -70,6 +75,9 @@ def create_folder(name, parent_id=None):
     Creates a new folder on Google Drive.
     Returns the ID of the created folder.
     """
+    target_parent = parent_id
+    if not target_parent:
+        target_parent = getattr(settings, 'GOOGLE_DRIVE_ROOT_FOLDER_ID', None)
     try:
         service = authenticate()
         file_metadata = {
@@ -77,20 +85,36 @@ def create_folder(name, parent_id=None):
             'mimeType': 'application/vnd.google-apps.folder'
         }
         
-        # Determine parent
-        target_parent = parent_id
-        if not target_parent:
-            target_parent = getattr(settings, 'GOOGLE_DRIVE_ROOT_FOLDER_ID', None)
-            
         if target_parent:
             file_metadata['parents'] = [target_parent]
             
-        folder = service.files().create(body=file_metadata, fields='id, name').execute()
+        logger.info(f"Attempting to create folder '{name}' on Google Drive under parent '{target_parent}'...")
+        folder = service.files().create(body=file_metadata, fields='id, name', supportsAllDrives=True).execute()
         logger.info(f"Created Google Drive folder '{name}' (ID: {folder.get('id')})")
         return folder.get('id')
+    except HttpError as e:
+        if e.resp.status == 403 and "storageQuotaExceeded" in str(e):
+            logger.warning(f"Google Drive returned storageQuotaExceeded (403) when creating folder '{name}'. Checking if the folder was still created...")
+            service = authenticate()
+            query = f"name = '{name}' and '{target_parent}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+            try:
+                search_results = service.files().list(
+                    q=query,
+                    fields="files(id, name)",
+                    supportsAllDrives=True,
+                    includeItemsFromAllDrives=True
+                ).execute()
+                files = search_results.get('files', [])
+                if files:
+                    logger.info(f"Folder '{name}' was successfully created despite storageQuotaExceeded warning. Folder ID: {files[0].get('id')}")
+                    return files[0].get('id')
+            except Exception as search_err:
+                logger.error(f"Failed to search for folder during quota fallback: {search_err}")
+        logger.error(f"Failed to create Google Drive folder '{name}': {e}")
+        raise e
     except Exception as e:
         logger.error(f"Failed to create Google Drive folder '{name}': {e}")
-        raise
+        raise e
 
 def upload_file(file_content, filename, mime_type, parent_id=None):
     """
@@ -98,17 +122,15 @@ def upload_file(file_content, filename, mime_type, parent_id=None):
     Returns a dictionary of metadata (id, name, mimeType, size, webViewLink, webContentLink).
     Gracefully handles Google Drive quota errors (e.g., Service Account quota limits on personal drives).
     """
+    target_parent = parent_id
+    if not target_parent:
+        target_parent = getattr(settings, 'GOOGLE_DRIVE_ROOT_FOLDER_ID', None)
     try:
         service = authenticate()
         file_metadata = {
             'name': filename
         }
         
-        # Determine parent
-        target_parent = parent_id
-        if not target_parent:
-            target_parent = getattr(settings, 'GOOGLE_DRIVE_ROOT_FOLDER_ID', None)
-            
         if target_parent:
             file_metadata['parents'] = [target_parent]
             
@@ -120,7 +142,8 @@ def upload_file(file_content, filename, mime_type, parent_id=None):
         else:
             raise ValueError("file_content must be bytes or a file-like object.")
             
-        media = MediaIoBaseUpload(fh, mimetype=mime_type, resumable=False)
+        media = MediaIoBaseUpload(fh, mimetype=mime_type, resumable=True)
+        logger.info(f"Attempting to upload file '{filename}' to Google Drive under parent '{target_parent}'...")
         file_drive = service.files().create(
             body=file_metadata,
             media_body=media,
@@ -133,10 +156,38 @@ def upload_file(file_content, filename, mime_type, parent_id=None):
             'id': file_drive.get('id'),
             'name': file_drive.get('name'),
             'mimeType': file_drive.get('mimeType'),
-            'size': int(file_drive.get('size', 0)),
+            'size': int(file_drive.get('size', 0)) if file_drive.get('size') else 0,
             'webViewLink': file_drive.get('webViewLink'),
             'webContentLink': file_drive.get('webContentLink')
         }
+    except HttpError as e:
+        if e.resp.status == 403 and "storageQuotaExceeded" in str(e):
+            logger.warning(f"Google Drive returned storageQuotaExceeded (403) when uploading file '{filename}'. Checking if the file was still created in parent '{target_parent}'...")
+            service = authenticate()
+            query = f"name = '{filename}' and '{target_parent}' in parents and trashed = false"
+            try:
+                search_results = service.files().list(
+                    q=query,
+                    fields="files(id, name, mimeType, size, webViewLink, webContentLink)",
+                    supportsAllDrives=True,
+                    includeItemsFromAllDrives=True
+                ).execute()
+                files = search_results.get('files', [])
+                if files:
+                    file_drive = files[0]
+                    logger.info(f"File '{filename}' was successfully created despite storageQuotaExceeded warning. File ID: {file_drive.get('id')}")
+                    return {
+                        'id': file_drive.get('id'),
+                        'name': file_drive.get('name'),
+                        'mimeType': file_drive.get('mimeType'),
+                        'size': int(file_drive.get('size', 0)) if file_drive.get('size') else 0,
+                        'webViewLink': file_drive.get('webViewLink'),
+                        'webContentLink': file_drive.get('webContentLink')
+                    }
+            except Exception as search_err:
+                logger.error(f"Failed to search for file during quota fallback: {search_err}")
+        logger.error(f"Failed to upload file '{filename}' to Google Drive: {e}")
+        raise e
     except Exception as e:
         logger.warning(f"Google Drive upload fallback triggered for '{filename}': {e}")
         import uuid
@@ -163,7 +214,7 @@ def download_file(file_id):
     """
     try:
         service = authenticate()
-        request = service.files().get_media(fileId=file_id)
+        request = service.files().get_media(fileId=file_id, supportsAllDrives=True)
         fh = io.BytesIO()
         downloader = MediaIoBaseDownload(fh, request)
         done = False
@@ -178,11 +229,21 @@ def download_file(file_id):
 def delete_file(file_id):
     """
     Deletes a file or folder from Google Drive by ID.
+    Handles already-deleted or fallback items safely.
     """
+    if not file_id or file_id.startswith('drive_file_'):
+        logger.warning(f"Skipping deletion for fallback or empty Google Drive ID: '{file_id}'")
+        return
     try:
         service = authenticate()
-        service.files().delete(fileId=file_id).execute()
+        service.files().delete(fileId=file_id, supportsAllDrives=True).execute()
         logger.info(f"Deleted Google Drive object (ID: {file_id})")
+    except HttpError as e:
+        if e.resp.status in [404, 410]:
+            logger.warning(f"Google Drive object '{file_id}' already deleted or not found: {e}")
+        else:
+            logger.error(f"Failed to delete Google Drive object '{file_id}': {e}")
+            raise
     except Exception as e:
         logger.error(f"Failed to delete Google Drive object '{file_id}': {e}")
         raise
@@ -197,7 +258,8 @@ def rename_file(file_id, new_name):
         updated_file = service.files().update(
             fileId=file_id, 
             body=file_metadata, 
-            fields='id, name'
+            fields='id, name',
+            supportsAllDrives=True
         ).execute()
         logger.info(f"Renamed Google Drive object '{file_id}' to '{new_name}'")
         return updated_file
@@ -212,7 +274,7 @@ def move_file(file_id, new_parent_id):
     try:
         service = authenticate()
         # Retrieve the existing parents to remove
-        file_metadata = service.files().get(fileId=file_id, fields='parents').execute()
+        file_metadata = service.files().get(fileId=file_id, fields='parents', supportsAllDrives=True).execute()
         previous_parents = ",".join(file_metadata.get('parents', []))
         
         # Update parents
@@ -220,7 +282,8 @@ def move_file(file_id, new_parent_id):
             fileId=file_id,
             addParents=new_parent_id,
             removeParents=previous_parents,
-            fields='id, parents'
+            fields='id, parents',
+            supportsAllDrives=True
         ).execute()
         logger.info(f"Moved Google Drive object '{file_id}' to parent '{new_parent_id}'")
         return updated_file
@@ -236,7 +299,8 @@ def get_metadata(file_id):
         service = authenticate()
         return service.files().get(
             fileId=file_id, 
-            fields='id, name, mimeType, size, webViewLink, webContentLink, parents'
+            fields='id, name, mimeType, size, webViewLink, webContentLink, parents',
+            supportsAllDrives=True
         ).execute()
     except Exception as e:
         logger.error(f"Failed to fetch metadata for object '{file_id}': {e}")
@@ -251,7 +315,9 @@ def list_folder_contents(folder_id):
         query = f"'{folder_id}' in parents and trashed = false"
         results = service.files().list(
             q=query, 
-            fields="files(id, name, mimeType, size, webViewLink, webContentLink)"
+            fields="files(id, name, mimeType, size, webViewLink, webContentLink)",
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True
         ).execute()
         return results.get('files', [])
     except Exception as e:

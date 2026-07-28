@@ -8,6 +8,9 @@ from django.db import transaction
 from django.db import IntegrityError
 from django.db.models.deletion import ProtectedError
 from datetime import date, timedelta
+import logging
+
+logger = logging.getLogger(__name__)
 
 from .models import MOUTemplate, MOU, MOUDocument, MOURenewal, MOUShare, DepartmentSubmission
 from .serializers import MOUTemplateSerializer, MOUSerializer, MOUDocumentSerializer
@@ -547,12 +550,14 @@ class DepartmentSubmissionView(APIView):
                 
                 # Upload directly to Google Drive under Department Submission folder
                 from services import drive_service
+                logger.info(f"Triggering department submission file upload to Google Drive. File: '{uploaded_file.name}' under parent Google Folder ID: '{submission_folder.google_folder_id if submission_folder else None}'...")
                 drive_metadata = drive_service.upload_file(
                     uploaded_file,
                     uploaded_file.name,
                     file_type,
                     submission_folder.google_folder_id if submission_folder else None
                 )
+                logger.info(f"Department submission file upload successful. Metadata: {drive_metadata}")
                 signed_file.google_file_id = drive_metadata['id']
                 signed_file.mime_type = drive_metadata['mimeType']
                 signed_file.file_size = drive_metadata['size']
@@ -897,12 +902,14 @@ class TemplateCollectionViewSet(viewsets.ModelViewSet):
             file_type = "application/pdf"
 
         from services import drive_service
+        logger.info(f"Triggering template document file upload to Google Drive. File: '{doc_file.name}' under root folder...")
         drive_meta = drive_service.upload_file(
             doc_file,
             doc_file.name,
             file_type,
             None
         )
+        logger.info(f"Template document file upload successful. Metadata: {drive_meta}")
 
         doc = TemplateDocument.objects.create(
             template_collection=collection,

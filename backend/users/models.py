@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from roles.models import Role
+import uuid
 
 class CustomUserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):
@@ -40,6 +41,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     phone = models.CharField(max_length=20, blank=True, null=True)
     designation = models.CharField(max_length=100, blank=True, null=True)
     department = models.CharField(max_length=100, blank=True, null=True)
+    stream = models.CharField(max_length=100, blank=True, null=True)
     
     role = models.ForeignKey(Role, on_delete=models.SET_NULL, null=True, related_name='users')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Active')
@@ -73,3 +75,25 @@ class UserPermission(models.Model):
     def __str__(self):
         status = "Granted" if self.is_granted else "Revoked"
         return f"{self.user.email} - {self.permission.codename} ({status})"
+
+class UserInvitation(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    email = models.EmailField()
+    stream = models.CharField(max_length=100)
+    department = models.CharField(max_length=100)
+    system_role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name='invitations')
+    token = models.CharField(max_length=255, unique=True)
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
+    is_cancelled = models.BooleanField(default=False)
+    created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, related_name='created_invitations')
+    created_at = models.DateTimeField(auto_now_add=True)
+    accepted_at = models.DateTimeField(blank=True, null=True)
+    ip_address = models.GenericIPAddressField(blank=True, null=True)
+    user_agent = models.TextField(blank=True, null=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Invitation for {self.email} ({self.system_role.name})"

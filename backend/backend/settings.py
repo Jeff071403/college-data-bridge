@@ -36,9 +36,12 @@ required_vars = [
 ]
 for var in required_vars:
     if not env(var, default=None):
-        raise ImproperlyConfigured(f"Missing required environment variable: {var}")
+        if env.bool('DEBUG', default=True):
+            print(f"WARNING: Missing environment variable: {var}")
+        else:
+            raise ImproperlyConfigured(f"Missing required environment variable: {var}")
 
-SECRET_KEY = env('SECRET_KEY')
+SECRET_KEY = env('SECRET_KEY', default='django-insecure-+=t3a@n8j5g#$-rdym+*70zi*_8fvf=r*-jh5fm^u8#-6f%j7o')
 DEBUG = env.bool('DEBUG', default=True)
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['*'])
 
@@ -233,3 +236,15 @@ SIMPLE_JWT = {
 # CORS Settings
 CORS_ALLOW_ALL_ORIGINS = True # In production, lock down to the frontend's origin
 CORS_ALLOW_CREDENTIALS = True
+
+# Email Configuration
+EMAIL_BACKEND = env('EMAIL_BACKEND', default='django.core.mail.backends.smtp.EmailBackend')
+EMAIL_HOST = env('EMAIL_HOST', default='localhost')
+EMAIL_PORT = env('EMAIL_PORT', default=25, cast=int)
+EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='')
+EMAIL_USE_TLS = env('EMAIL_USE_TLS', default=False, cast=bool)
+EMAIL_USE_SSL = env('EMAIL_USE_SSL', default=False, cast=bool)
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='MCC LEGAL DOCUMENT <no-reply@mcc.edu>')
+COMPANY_LOGO_URL = env('COMPANY_LOGO_URL', default='https://example.com/logo.png')
+FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:5173')

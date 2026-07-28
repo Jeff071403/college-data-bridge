@@ -6,13 +6,18 @@ import {
   Paper, IconButton, Chip, Dialog, DialogTitle, DialogContent, 
   DialogActions, TextField, MenuItem, Select, FormControl, 
   InputLabel, Alert, Grid, Divider, FormControlLabel,
-  Autocomplete
+  Autocomplete, Tabs, Tab, Tooltip, InputAdornment
 } from '@mui/material';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import EditIcon from '@mui/icons-material/Edit';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
 import SecurityIcon from '@mui/icons-material/Security';
 import CloseIcon from '@mui/icons-material/Close';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import BlockIcon from '@mui/icons-material/Block';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import DeleteIcon from '@mui/icons-material/Delete';
+import SearchIcon from '@mui/icons-material/Search';
 import CircularProgress from '@mui/material/CircularProgress';
 
 import api from '../services/api';
@@ -434,6 +439,43 @@ const UserManagement = () => {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [newPassword, setNewPassword] = useState('');
 
+  // Delete user confirmation states
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState(null);
+
+  // Local Toast notification
+  const [toast, setToast] = useState({ open: false, message: '', severity: 'success' });
+  const showToast = (message, severity = 'success') => {
+    setToast({ open: true, message, severity });
+    setTimeout(() => setToast(prev => ({ ...prev, open: false })), 3000);
+  };
+
+  // Invitation tab states
+  const [currentTab, setCurrentTab] = useState(0); // 0 = Users, 1 = Invitations
+  const [invitations, setInvitations] = useState([]);
+  const [invitationsLoading, setInvitationsLoading] = useState(false);
+  
+  // Invitation Modal states
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [inviteDialogMode, setInviteDialogMode] = useState('email'); // 'email' or 'link'
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteStream, setInviteStream] = useState('');
+  const [inviteDept, setInviteDept] = useState('');
+  const [inviteRole, setInviteRole] = useState('');
+  const [inviteSubmitting, setInviteSubmitting] = useState(false);
+  const [filteredInviteDepts, setFilteredInviteDepts] = useState([]);
+  const [inviteError, setInviteError] = useState('');
+  const [inviteSuccess, setInviteSuccess] = useState('');
+  const [generatedLink, setGeneratedLink] = useState('');
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  // Invitation list search & filter states
+  const [invitationSearch, setInvitationSearch] = useState('');
+  const [invitationFilterStream, setInvitationFilterStream] = useState('');
+  const [invitationFilterDept, setInvitationFilterDept] = useState('');
+  const [invitationFilterRole, setInvitationFilterRole] = useState('');
+  const [invitationFilterStatus, setInvitationFilterStatus] = useState('');
+
 
 
   // Load initial data
@@ -460,6 +502,128 @@ const UserManagement = () => {
   };
 
   useEffect(() => { loadData(); }, []);
+
+  const loadInvitations = async () => {
+    setInvitationsLoading(true);
+    try {
+      const params = {};
+      if (invitationSearch) params.search = invitationSearch;
+      if (invitationFilterStream) params.stream = invitationFilterStream;
+      if (invitationFilterDept) params.department = invitationFilterDept;
+      if (invitationFilterRole) params.role = invitationFilterRole;
+      if (invitationFilterStatus) params.status = invitationFilterStatus;
+      
+      const res = await api.get('/api/users/invitations/', { params });
+      if (res.data.results) {
+        setInvitations(res.data.results);
+      } else {
+        setInvitations(res.data);
+      }
+    } catch (err) {
+      console.error('Failed to load invitations:', err);
+    } finally {
+      setInvitationsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentTab === 1) {
+      loadInvitations();
+    }
+  }, [currentTab, invitationSearch, invitationFilterStream, invitationFilterDept, invitationFilterRole, invitationFilterStatus]);
+
+  const handleInviteOpen = (mode = 'email') => {
+    setInviteDialogMode(mode);
+    setInviteEmail('');
+    setInviteStream('');
+    setInviteDept('');
+    setInviteRole('');
+    setFilteredInviteDepts([]);
+    setInviteError('');
+    setInviteSuccess('');
+    setGeneratedLink('');
+    setInviteDialogOpen(true);
+  };
+
+  const handleInviteCategoryChange = (e) => {
+    const catId = e.target.value;
+    setInviteStream(catId);
+    setInviteDept('');
+    setFilteredInviteDepts(departments.filter(d => d.category === catId));
+  };
+
+  const handleInviteSubmit = async (e) => {
+    e.preventDefault();
+    if (!inviteEmail) {
+      setInviteError('Please enter a valid email address.');
+      return;
+    }
+    setInviteSubmitting(true);
+    setInviteError('');
+    setInviteSuccess('');
+    setGeneratedLink('');
+
+    try {
+      const res = await api.post('/api/users/invite/', {
+        email: inviteEmail
+      });
+      
+      const inviteUrl = `${window.location.origin}/register?token=${res.data.token}`;
+      
+      setGeneratedLink(inviteUrl);
+      navigator.clipboard.writeText(inviteUrl);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+      setInviteSuccess('Invitation generated, email sent, and link copied to clipboard successfully!');
+      showToast('Invitation generated, email sent, and link copied to clipboard successfully!', 'success');
+      
+      if (currentTab === 1) {
+        loadInvitations();
+      }
+    } catch (err) {
+      setInviteError(err.response?.data?.detail || 'Failed to send invitation. Please try again.');
+      showToast(err.response?.data?.detail || 'Failed to send invitation.', 'error');
+    } finally {
+      setInviteSubmitting(false);
+    }
+  };
+
+  const handleResendInvite = async (inviteItem) => {
+    try {
+      await api.post('/api/users/resend-invite/', { id: inviteItem.id });
+      loadInvitations();
+      showToast('Invitation email resent successfully!', 'success');
+    } catch (err) {
+      showToast(err.response?.data?.detail || 'Failed to resend invitation.', 'error');
+    }
+  };
+
+  const handleCancelInvite = async (inviteItem) => {
+    try {
+      await api.post('/api/users/cancel-invite/', { id: inviteItem.id });
+      loadInvitations();
+      showToast('Invitation cancelled successfully.', 'success');
+    } catch (err) {
+      showToast(err.response?.data?.detail || 'Failed to cancel invitation.', 'error');
+    }
+  };
+
+  const handleCopyExistingLink = (inviteItem) => {
+    const inviteUrl = `${window.location.origin}/register?token=${inviteItem.token}`;
+    navigator.clipboard.writeText(inviteUrl);
+    showToast('Invitation link copied to clipboard.', 'success');
+  };
+
+  const handleDeleteInvite = async (inviteItem) => {
+    if (!window.confirm(`Are you sure you want to delete the invitation record for ${inviteItem.email}?`)) return;
+    try {
+      await api.delete(`/api/users/invitation/${inviteItem.id}/`);
+      loadInvitations();
+      showToast('Invitation deleted successfully.', 'success');
+    } catch (err) {
+      showToast(err.response?.data?.detail || 'Failed to delete invitation.', 'error');
+    }
+  };
 
   // Open creation dialog
   const handleCreateOpen = () => {
@@ -518,7 +682,9 @@ const UserManagement = () => {
       setSaveAttempted(true);
       return;
     }
-    const payload = { email, name, phone, designation, department, role_id: roleId, status };
+    const foundStream = deptCategories.find(c => c.id === deptCategory);
+    const streamName = foundStream ? foundStream.name : '';
+    const payload = { email, name, phone, designation, department, stream: streamName, role_id: roleId, status };
     try {
       if (isEditMode) {
         await api.put(`/api/users/${selectedUser.id}/`, payload);
@@ -546,6 +712,24 @@ const UserManagement = () => {
     } catch (err) {
       console.error('Failed to reset password:', err);
       setError('Failed to reset password.');
+    }
+  };
+
+  // User deletion handlers
+  const handleDeleteOpen = (userItem) => {
+    setUserToDelete(userItem);
+    setDeleteConfirmOpen(true);
+  };
+  const handleDeleteConfirm = async () => {
+    if (!userToDelete) return;
+    try {
+      await api.delete(`/api/users/${userToDelete.id}/`);
+      setDeleteConfirmOpen(false);
+      showToast(`User ${userToDelete.name} has been deleted successfully.`, 'success');
+      loadData();
+    } catch (err) {
+      console.error('Failed to delete user:', err);
+      showToast(err.response?.data?.detail || 'Failed to delete user account.', 'error');
     }
   };
 
@@ -588,268 +772,668 @@ const UserManagement = () => {
       {/* Title */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 800, mb: 1 }}>User Management</Typography>
-          <Typography variant="body1" color="text.secondary">
+          <Typography variant="h4" sx={{ fontWeight: 800, lineHeight: 1.2, mb: 0.5 }}>User Management</Typography>
+          <Typography variant="body2" color="text.secondary">
             Manage users, assign roles, toggle statuses, and set permission overrides.
           </Typography>
         </Box>
         {(['Super Admin', 'Admin'].includes(user?.role?.name) || hasPermission('create_users')) && (
-          <Button variant="contained" startIcon={<PersonAddIcon />} onClick={handleCreateOpen}>
-            Add New User
-          </Button>
+          <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexShrink: 0, ml: 3 }}>
+            <Button
+              variant="contained"
+              startIcon={<PersonAddIcon />}
+              onClick={handleCreateOpen}
+              sx={{ textTransform: 'none', fontWeight: 600, borderRadius: '10px', whiteSpace: 'nowrap' }}
+            >
+              Add New User
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={() => handleInviteOpen('link')}
+              sx={{ textTransform: 'none', fontWeight: 600, borderRadius: '10px', whiteSpace: 'nowrap' }}
+            >
+              Invite via Link
+            </Button>
+          </Box>
         )}
       </Box>
 
       {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 
-      {/* Role & Permission Legend */}
-      <Box sx={{ mb: 3, borderRadius: '16px', border: '1px solid', borderColor: 'divider', overflow: 'hidden', boxShadow: 'none', bgcolor: 'background.paper' }}>
-        <Box
-          sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', bgcolor: 'action.hover' }}
-          onClick={() => {
-            const el = document.getElementById('role-legend-body');
-            if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <SecurityIcon sx={{ color: 'primary.main', fontSize: '1.1rem' }} />
-            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Role &amp; Permission Guide</Typography>
-            <Chip label="Click to expand" size="small" sx={{ fontSize: '0.68rem', height: 20, bgcolor: 'rgba(79,70,229,0.1)', color: 'primary.main' }} />
-          </Box>
-          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.72rem' }}>What each role can and cannot do</Typography>
-        </Box>
-        <Box id="role-legend-body" sx={{ display: 'none' }}>
-          <Box sx={{ p: 2.5, borderTop: '1px solid', borderColor: 'divider' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
-              <thead>
-                <tr style={{ borderBottom: '2px solid #E2E8F0', textAlign: 'left' }}>
-                  <th style={{ padding: '8px 12px', fontWeight: 700 }}>Permission Name</th>
-                  <th style={{ padding: '8px 12px', textAlign: 'center', color: '#7C3AED' }}>Super Admin</th>
-                  <th style={{ padding: '8px 12px', textAlign: 'center', color: '#2563EB' }}>Admin</th>
-                  <th style={{ padding: '8px 12px', textAlign: 'center', color: '#059669' }}>User</th>
-                  <th style={{ padding: '8px 12px', textAlign: 'center', color: '#D97706' }}>View Only</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  ['View Dashboard & Stats', true, true, true, true],
-                  ['View / Search Folders & Files', true, true, true, true],
-                  ['Download & Preview Files', true, true, true, true],
-                  ['Upload Files to Folders', true, true, true, false],
-                  ['Create Root Folders & Subfolders', true, true, false, false],
-                  ['Create & Edit MOUs', true, true, false, false],
-                  ['Sign / Approve MOUs', true, true, true, false],
-                  ['Manage Users & Roles', true, true, false, false],
-                  ['View Activity Logs', true, true, false, false],
-                  ['Delete Folders / Files', true, true, false, false],
-                  ['Share Files Externally', true, true, true, false],
-                ].map(([perm, ...vals], ri) => (
-                  <tr key={perm} style={{ background: ri % 2 === 0 ? 'rgba(148,163,184,0.04)' : 'transparent' }}>
-                    <td style={{ padding: '7px 12px', fontWeight: 500 }}>{perm}</td>
-                    {vals.map((v, vi) => (
-                      <td key={vi} style={{ padding: '7px 12px', textAlign: 'center' }}>
-                        {v ? <span style={{ color: '#10B981', fontWeight: 700, fontSize: '1rem' }}>✓</span>
-                           : <span style={{ color: '#94A3B8', fontSize: '0.9rem' }}>—</span>}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </Box>
-        </Box>
-      </Box>
-
-      {/* Search & Filter Bar */}
-      <Box sx={{ p: 3, mb: 3.5, borderRadius: '16px', border: '1px solid', borderColor: 'divider', boxShadow: 'none', bgcolor: 'background.paper', width: '100%' }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>Search &amp; Filter Directory</Typography>
-          {(searchQuery || filterCategory || filterDept || filterUserType || filterRole || filterStatus) && (
-            <Button
-              size="small"
-              onClick={() => {
-                setSearchQuery('');
-                setFilterCategory('');
-                setFilterDept('');
-                setFilterUserType('');
-                setFilterRole('');
-                setFilterStatus('');
-              }}
-              sx={{ fontSize: '0.78rem', textTransform: 'none', color: 'primary.main', fontWeight: 600 }}
-            >
-              Clear All Filters
-            </Button>
-          )}
-        </Box>
-
-        {/* Row 1: Search */}
-        <Box sx={{ width: '100%', mb: 2 }}>
-          <TextField
-            size="small"
-            fullWidth
-            label="Search by name or email..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            sx={{
-              width: '100%',
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '10px',
-                bgcolor: '#fff',
-              }
-            }}
-          />
-        </Box>
-
-        {/* Row 2: 5 Filters in Responsive CSS Grid */}
-        <Box sx={{
-          display: 'grid',
-          gridTemplateColumns: {
-            xs: '1fr',
-            sm: 'repeat(2, 1fr)',
-            md: 'repeat(5, 1fr)',
+      {/* Navigation Tabs */}
+      <Tabs
+        value={currentTab}
+        onChange={(e, val) => setCurrentTab(val)}
+        sx={{
+          mb: 3,
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          '& .MuiTab-root': {
+            textTransform: 'none',
+            fontWeight: 600,
+            fontSize: '0.9rem',
+            fontFamily: 'Inter, system-ui, sans-serif',
+            minHeight: 44,
+            px: 2,
           },
-          gap: 2,
-          width: '100%',
-        }}>
-          {/* Stream */}
-          <FormControl fullWidth size="small">
-            <InputLabel>Stream</InputLabel>
-            <Select
-              value={filterCategory}
-              label="Stream"
-              onChange={(e) => {
-                setFilterCategory(e.target.value);
-                setFilterDept('');
+          '& .MuiTabs-indicator': { height: 2, borderRadius: '2px 2px 0 0' },
+        }}
+      >
+        <Tab label="Users Directory" icon={<span style={{ fontSize: '1rem' }}>👥</span>} iconPosition="start" />
+        <Tab label="Invitations Directory" icon={<span style={{ fontSize: '1rem' }}>✉️</span>} iconPosition="start" />
+      </Tabs>
+
+      {currentTab === 0 ? (
+        <>
+          {/* Role & Permission Legend */}
+          <Box sx={{ mb: 3, borderRadius: '16px', border: '1px solid', borderColor: 'divider', overflow: 'hidden', boxShadow: 'none', bgcolor: 'background.paper' }}>
+            <Box
+              sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', bgcolor: 'action.hover' }}
+              onClick={() => {
+                const el = document.getElementById('role-legend-body');
+                if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
               }}
-              sx={{ borderRadius: '10px', bgcolor: '#fff' }}
             >
-              <MenuItem value="">All Streams</MenuItem>
-              {deptCategories.map(c => (
-                <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <SecurityIcon sx={{ color: 'primary.main', fontSize: '1.1rem' }} />
+                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Role &amp; Permission Guide</Typography>
+                <Chip label="Click to expand" size="small" sx={{ fontSize: '0.68rem', height: 20, bgcolor: 'rgba(79,70,229,0.1)', color: 'primary.main' }} />
+              </Box>
+              <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.72rem' }}>What each role can and cannot do</Typography>
+            </Box>
+            <Box id="role-legend-body" sx={{ display: 'none' }}>
+              <Box sx={{ p: 2.5, borderTop: '1px solid', borderColor: 'divider' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid #E2E8F0', textAlign: 'left' }}>
+                      <th style={{ padding: '8px 12px', fontWeight: 700 }}>Permission Name</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', color: '#7C3AED' }}>Super Admin</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', color: '#2563EB' }}>Admin</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', color: '#059669' }}>User</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', color: '#D97706' }}>View Only</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      ['View Dashboard & Stats', true, true, true, true],
+                      ['View / Search Folders & Files', true, true, true, true],
+                      ['Download & Preview Files', true, true, true, true],
+                      ['Upload Files to Folders', true, true, true, false],
+                      ['Create Root Folders & Subfolders', true, true, false, false],
+                      ['Create & Edit MOUs', true, true, false, false],
+                      ['Sign / Approve MOUs', true, true, true, false],
+                      ['Manage Users & Roles', true, true, false, false],
+                      ['View Activity Logs', true, true, false, false],
+                      ['Delete Folders / Files', true, true, false, false],
+                      ['Share Files Externally', true, true, true, false],
+                    ].map(([perm, ...vals], ri) => (
+                      <tr key={perm} style={{ background: ri % 2 === 0 ? 'rgba(148,163,184,0.04)' : 'transparent' }}>
+                        <td style={{ padding: '7px 12px', fontWeight: 500 }}>{perm}</td>
+                        {vals.map((v, vi) => (
+                          <td key={vi} style={{ padding: '7px 12px', textAlign: 'center' }}>
+                            {v ? <span style={{ color: '#10B981', fontWeight: 700, fontSize: '1rem' }}>✓</span>
+                               : <span style={{ color: '#94A3B8', fontSize: '0.9rem' }}>—</span>}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Box>
+            </Box>
+          </Box>
 
-          {/* Department */}
-          <Autocomplete
-            size="small"
-            disabled={!filterCategory}
-            options={departments.filter(d => d.category === filterCategory)}
-            getOptionLabel={(option) => {
-              if (typeof option === 'string') return option;
-              const catObj = deptCategories.find(c => c.id === filterCategory);
-              let n = option.name;
-              if (catObj?.name === 'Aided' && n.endsWith(' (Aided)')) return n.slice(0, -8);
-              if (catObj?.name === 'Self-Financed (SFS)' && n.endsWith(' (SFS)')) return n.slice(0, -6);
-              return n;
-            }}
-            value={departments.find(d => d.name === filterDept) || null}
-            onChange={(e, newVal) => setFilterDept(newVal ? newVal.name : '')}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Department"
-                placeholder="Select dept..."
-                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', bgcolor: '#fff' } }}
-              />
-            )}
-            fullWidth
-          />
+          {/* Search & Filter Bar */}
+          <Box sx={{ p: 2.5, mb: 2.5, borderRadius: '12px', border: '1px solid', borderColor: 'divider', boxShadow: 'none', bgcolor: 'background.paper' }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5, fontFamily: 'Inter, system-ui, sans-serif' }}>
+              Search &amp; Filter Directory
+            </Typography>
 
-          {/* User Type */}
-          <FormControl fullWidth size="small">
-            <InputLabel>User Type</InputLabel>
-            <Select
-              value={filterUserType}
-              label="User Type"
-              onChange={(e) => setFilterUserType(e.target.value)}
-              sx={{ borderRadius: '10px', bgcolor: '#fff' }}
-            >
-              <MenuItem value="">All Types</MenuItem>
-              <MenuItem value="Super Admin">Super Admin</MenuItem>
-              <MenuItem value="Admin / Lawyer">Admin / Lawyer</MenuItem>
-              <MenuItem value="Dept. Coordinator">Dept. Coordinator</MenuItem>
-              <MenuItem value="View Only">View Only</MenuItem>
-            </Select>
-          </FormControl>
+            {/* Search input — full width */}
+            <TextField
+              fullWidth
+              size="small"
+              placeholder="Search by name or email..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              sx={{ mb: 1.5 }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon sx={{ color: 'text.secondary', fontSize: '1.1rem' }} />
+                  </InputAdornment>
+                ),
+                sx: { borderRadius: '8px', bgcolor: '#fff' }
+              }}
+            />
 
-          {/* Role */}
-          <FormControl fullWidth size="small">
-            <InputLabel>Role</InputLabel>
-            <Select
-              value={filterRole}
-              label="Role"
-              onChange={(e) => setFilterRole(e.target.value)}
-              sx={{ borderRadius: '10px', bgcolor: '#fff' }}
-            >
-              <MenuItem value="">All Roles</MenuItem>
-              {roles.map(r => (
-                <MenuItem key={r.id} value={r.id}>{r.name}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+            {/* Dropdown filters row */}
+            <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
+              {/* Stream */}
+              <FormControl size="small" sx={{ minWidth: 140 }}>
+                <InputLabel>Stream</InputLabel>
+                <Select
+                  value={filterCategory}
+                  label="Stream"
+                  onChange={(e) => { setFilterCategory(e.target.value); setFilterDept(''); }}
+                  sx={{ borderRadius: '8px', bgcolor: '#fff' }}
+                >
+                  <MenuItem value="">All Streams</MenuItem>
+                  {deptCategories.map(c => (
+                    <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
 
-          {/* Status */}
-          <FormControl fullWidth size="small">
-            <InputLabel>Status</InputLabel>
-            <Select
-              value={filterStatus}
-              label="Status"
-              onChange={(e) => setFilterStatus(e.target.value)}
-              sx={{ borderRadius: '10px', bgcolor: '#fff' }}
-            >
-              <MenuItem value="">All Statuses</MenuItem>
-              <MenuItem value="Active">Active</MenuItem>
-              <MenuItem value="Disabled">Disabled</MenuItem>
-            </Select>
-          </FormControl>
-        </Box>
-      </Box>
+              {/* Department */}
+              <FormControl size="small" sx={{ minWidth: 160 }}>
+                <InputLabel>Department</InputLabel>
+                <Select
+                  value={filterDept}
+                  label="Department"
+                  onChange={(e) => setFilterDept(e.target.value)}
+                  sx={{ borderRadius: '8px', bgcolor: '#fff' }}
+                >
+                  <MenuItem value="">Department</MenuItem>
+                  {(filterCategory ? departments.filter(d => d.category === filterCategory) : departments).map(d => (
+                    <MenuItem key={d.id} value={d.name}>{d.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
 
-      {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress /></Box>
+              {/* User Type */}
+              <FormControl size="small" sx={{ minWidth: 140 }}>
+                <InputLabel>User Type</InputLabel>
+                <Select
+                  value={filterUserType}
+                  label="User Type"
+                  onChange={(e) => setFilterUserType(e.target.value)}
+                  sx={{ borderRadius: '8px', bgcolor: '#fff' }}
+                >
+                  <MenuItem value="">User Type</MenuItem>
+                  <MenuItem value="Super Admin">Super Admin</MenuItem>
+                  <MenuItem value="Admin / Lawyer">Admin</MenuItem>
+                  <MenuItem value="Dept. Coordinator">Dept. Coordinator</MenuItem>
+                  <MenuItem value="View Only">View Only</MenuItem>
+                </Select>
+              </FormControl>
+
+              {/* Role */}
+              <FormControl size="small" sx={{ minWidth: 130 }}>
+                <InputLabel>Role</InputLabel>
+                <Select
+                  value={filterRole}
+                  label="Role"
+                  onChange={(e) => setFilterRole(e.target.value)}
+                  sx={{ borderRadius: '8px', bgcolor: '#fff' }}
+                >
+                  <MenuItem value="">Role</MenuItem>
+                  {roles.map(r => (
+                    <MenuItem key={r.id} value={r.id}>{r.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              {/* Status */}
+              <FormControl size="small" sx={{ minWidth: 120 }}>
+                <InputLabel>Status</InputLabel>
+                <Select
+                  value={filterStatus}
+                  label="Status"
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  sx={{ borderRadius: '8px', bgcolor: '#fff' }}
+                >
+                  <MenuItem value="">Status</MenuItem>
+                  <MenuItem value="Active">Active</MenuItem>
+                  <MenuItem value="Disabled">Disabled</MenuItem>
+                </Select>
+              </FormControl>
+
+              <Box sx={{ flexGrow: 1 }} />
+
+              <Button
+                variant="text"
+                size="small"
+                onClick={() => { setSearchQuery(''); setFilterCategory(''); setFilterDept(''); setFilterUserType(''); setFilterRole(''); setFilterStatus(''); }}
+                sx={{ textTransform: 'none', color: 'text.secondary', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
+              >
+                Clear filters
+              </Button>
+            </Box>
+          </Box>
+
+          {loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress /></Box>
+          ) : (
+            <TableContainer component={Paper} sx={{ borderRadius: '12px', border: '1px solid', borderColor: 'divider', boxShadow: 'none', overflowX: 'auto' }}>
+              <Table sx={{ tableLayout: 'fixed', minWidth: 800 }}>
+                <colgroup>
+                  <col style={{ width: '18%' }} />
+                  <col style={{ width: '22%' }} />
+                  <col style={{ width: '12%' }} />
+                  <col style={{ width: '20%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '12%' }} />
+                  <col style={{ width: '10%' }} />
+                </colgroup>
+                <TableHead>
+                  <TableRow sx={{ bgcolor: 'action.hover' }}>
+                    {['Name', 'Email', 'Role', 'Department', 'Status', 'Last Login'].map(h => (
+                      <TableCell key={h} sx={{ fontWeight: 700, fontSize: '0.75rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'text.secondary', py: 1.5, px: 2, verticalAlign: 'middle' }}>{h}</TableCell>
+                    ))}
+                    <TableCell sx={{ fontWeight: 700, fontSize: '0.75rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'text.secondary', py: 1.5, px: 2, verticalAlign: 'middle' }} align="center">Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {filteredUsers.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
+                        <Typography color="text.secondary">No users found matching filters.</Typography>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredUsers.map((userItem) => (
+                      <TableRow key={userItem.id} hover sx={{ '& td': { verticalAlign: 'middle', py: 1.25, px: 2 } }}>
+                        <TableCell sx={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{userItem.name}</TableCell>
+                        <TableCell sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.85rem', color: 'text.secondary' }}>{userItem.email}</TableCell>
+                        <TableCell>
+                          <Chip label={userItem.role?.name || 'No Role'} color="primary" size="small" variant="outlined" sx={{ fontWeight: 600, fontSize: '0.72rem', height: 24, borderRadius: '6px' }} />
+                        </TableCell>
+                        <TableCell sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{userItem.department || '—'}</TableCell>
+                        <TableCell>
+                          <Chip
+                            label={userItem.status}
+                            size="small"
+                            sx={{
+                              fontWeight: 700,
+                              fontSize: '0.72rem',
+                              height: 24,
+                              borderRadius: '6px',
+                              bgcolor: userItem.status === 'Active' ? '#10B981' : '#EF4444',
+                              color: '#fff',
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ fontSize: '0.83rem', color: 'text.secondary', whiteSpace: 'nowrap' }}>
+                          {userItem.last_login ? new Date(userItem.last_login).toLocaleDateString() : 'Never'}
+                        </TableCell>
+                        <TableCell align="center">
+                          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 0.5 }}>
+                            {(['Super Admin', 'Admin'].includes(user?.role?.name) || hasPermission('edit_users')) && (
+                              <>
+                                <Tooltip title="Edit Profile">
+                                  <IconButton size="small" onClick={() => handleEditOpen(userItem)} color="primary" sx={{ p: 0.75 }}>
+                                    <EditIcon sx={{ fontSize: '1rem' }} />
+                                  </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Reset Password">
+                                  <IconButton size="small" onClick={() => handleResetOpen(userItem)} color="default" sx={{ p: 0.75 }}>
+                                    <LockOpenIcon sx={{ fontSize: '1rem' }} />
+                                  </IconButton>
+                                </Tooltip>
+                              </>
+                            )}
+                            {(['Super Admin', 'Admin'].includes(user?.role?.name) || hasPermission('delete_users')) && (
+                              <Tooltip title="Delete User">
+                                <IconButton size="small" onClick={() => handleDeleteOpen(userItem)} color="error" sx={{ p: 0.75 }}>
+                                  <DeleteIcon sx={{ fontSize: '1rem' }} />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                          </Box>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </>
       ) : (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Name</TableCell>
-                <TableCell>Email</TableCell>
-                <TableCell>Role</TableCell>
-                <TableCell>Department</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Last Login</TableCell>
-                <TableCell align="right">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {filteredUsers.map((userItem) => (
-                <TableRow key={userItem.id} hover>
-                  <TableCell sx={{ fontWeight: 600 }}>{userItem.name}</TableCell>
-                  <TableCell>{userItem.email}</TableCell>
-                  <TableCell>
-                    <Chip label={userItem.role?.name || 'No Role'} color="primary" size="small" variant="outlined" />
-                  </TableCell>
-                  <TableCell>{userItem.department || '—'}</TableCell>
-                  <TableCell>
-                    <Chip label={userItem.status} color={userItem.status === 'Active' ? 'success' : 'error'} size="small" />
-                  </TableCell>
-                  <TableCell>{userItem.last_login ? new Date(userItem.last_login).toLocaleString() : 'Never'}</TableCell>
-                  <TableCell align="right">
-                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
-                      {(['Super Admin', 'Admin'].includes(user?.role?.name) || hasPermission('edit_users')) && (
-                        <>
-                          <IconButton size="small" title="Edit Profile" onClick={() => handleEditOpen(userItem)}><EditIcon fontSize="small" /></IconButton>
-                          <IconButton size="small" title="Reset Password" onClick={() => handleResetOpen(userItem)}><LockOpenIcon fontSize="small" /></IconButton>
-                        </>
-                      )}
-                    </Box>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+        <>
+          {/* Invitations Search & Filter Bar */}
+          <Box sx={{ p: 3, mb: 3.5, borderRadius: '16px', border: '1px solid', borderColor: 'divider', boxShadow: 'none', bgcolor: 'background.paper', width: '100%' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 800, fontFamily: 'Inter, system-ui, sans-serif' }}>
+                Search &amp; Filter Invitations
+              </Typography>
+              <Button 
+                variant="outlined" 
+                size="small" 
+                onClick={() => {
+                  setInvitationSearch('');
+                  setInvitationFilterStream('');
+                  setInvitationFilterDept('');
+                  setInvitationFilterRole('');
+                  setInvitationFilterStatus('');
+                }}
+                sx={{ borderRadius: '10px', textTransform: 'none' }}
+              >
+                Clear Filters
+              </Button>
+            </Box>
+
+            <Grid container spacing={2}>
+              {/* Search */}
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  placeholder="Search by email..."
+                  value={invitationSearch}
+                  onChange={(e) => setInvitationSearch(e.target.value)}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon sx={{ color: 'text.secondary', fontSize: '1.1rem' }} />
+                      </InputAdornment>
+                    ),
+                    sx: { borderRadius: '10px', bgcolor: '#fff' }
+                  }}
+                />
+              </Grid>
+
+              {/* Stream */}
+              <Grid item xs={12} sm={2}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Stream</InputLabel>
+                  <Select
+                    value={invitationFilterStream}
+                    label="Stream"
+                    onChange={(e) => setInvitationFilterStream(e.target.value)}
+                    sx={{ borderRadius: '10px', bgcolor: '#fff' }}
+                  >
+                    <MenuItem value="">All Streams</MenuItem>
+                    {deptCategories.map(c => (
+                      <MenuItem key={c.id} value={c.name}>{c.name}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              {/* Department */}
+              <Grid item xs={12} sm={2}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Department</InputLabel>
+                  <Select
+                    value={invitationFilterDept}
+                    label="Department"
+                    onChange={(e) => setInvitationFilterDept(e.target.value)}
+                    sx={{ borderRadius: '10px', bgcolor: '#fff' }}
+                  >
+                    <MenuItem value="">All Depts</MenuItem>
+                    {departments.map(d => (
+                      <MenuItem key={d.id} value={d.name}>{d.name}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              {/* Role */}
+              <Grid item xs={12} sm={2}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Role</InputLabel>
+                  <Select
+                    value={invitationFilterRole}
+                    label="Role"
+                    onChange={(e) => setInvitationFilterRole(e.target.value)}
+                    sx={{ borderRadius: '10px', bgcolor: '#fff' }}
+                  >
+                    <MenuItem value="">All Roles</MenuItem>
+                    {roles.map(r => (
+                      <MenuItem key={r.id} value={r.id}>{r.name}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              {/* Status */}
+              <Grid item xs={12} sm={2}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Status</InputLabel>
+                  <Select
+                    value={invitationFilterStatus}
+                    label="Status"
+                    onChange={(e) => setInvitationFilterStatus(e.target.value)}
+                    sx={{ borderRadius: '10px', bgcolor: '#fff' }}
+                  >
+                    <MenuItem value="">All Statuses</MenuItem>
+                    <MenuItem value="Pending">Pending</MenuItem>
+                    <MenuItem value="Accepted">Accepted</MenuItem>
+                    <MenuItem value="Expired">Expired</MenuItem>
+                    <MenuItem value="Cancelled">Cancelled</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+            </Grid>
+          </Box>
+
+          {invitationsLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress /></Box>
+          ) : (
+            <TableContainer component={Paper} sx={{ borderRadius: '16px', border: '1px solid', borderColor: 'divider', boxShadow: 'none' }}>
+              <Table>
+                <TableHead>
+                  <TableRow sx={{ bgcolor: 'action.hover' }}>
+                    <TableCell sx={{ fontWeight: 700 }}>Invited Email</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Stream</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Department</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>System Role</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Created By</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Sent Date</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Expiry</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {invitations.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={9} align="center" sx={{ py: 6 }}>
+                        <Typography color="text.secondary">No invitations found.</Typography>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    invitations.map((invite) => {
+                      const isPending = invite.status === 'Pending';
+                      
+                      return (
+                        <TableRow key={invite.id} hover>
+                          <TableCell sx={{ fontWeight: 600 }}>{invite.email}</TableCell>
+                          <TableCell>{invite.stream || '—'}</TableCell>
+                          <TableCell>{invite.department || '—'}</TableCell>
+                          <TableCell>
+                            <Chip label={invite.system_role?.name || 'No Role'} color="primary" size="small" variant="outlined" />
+                          </TableCell>
+                          <TableCell>{invite.created_by_email || 'System'}</TableCell>
+                          <TableCell>{new Date(invite.created_at).toLocaleString()}</TableCell>
+                          <TableCell>{new Date(invite.expires_at).toLocaleString()}</TableCell>
+                          <TableCell>
+                            <Chip 
+                              label={invite.status} 
+                              color={
+                                invite.status === 'Accepted' ? 'success' :
+                                invite.status === 'Pending' ? 'warning' :
+                                invite.status === 'Cancelled' ? 'error' : 'default'
+                              } 
+                              size="small" 
+                              sx={{ fontWeight: 600 }}
+                            />
+                          </TableCell>
+                          <TableCell align="right">
+                            <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
+                              {!invite.is_used && (
+                                <Tooltip title="Resend Invitation Email">
+                                  <IconButton size="small" onClick={() => handleResendInvite(invite)} color="primary">
+                                    <RefreshIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+                              {isPending && (
+                                <Tooltip title="Cancel Invitation">
+                                  <IconButton size="small" onClick={() => handleCancelInvite(invite)} color="error">
+                                    <BlockIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+                              <Tooltip title="Copy Register Link">
+                                <IconButton size="small" onClick={() => handleCopyExistingLink(invite)} color="info">
+                                  <ContentCopyIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title="Delete Invitation Record">
+                                <IconButton size="small" onClick={() => handleDeleteInvite(invite)} color="default">
+                                  <DeleteIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            </Box>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </>
+      )}
+
+      {/* Invite User Dialog */}
+      <Dialog
+        open={inviteDialogOpen}
+        onClose={() => setInviteDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: { borderRadius: '16px', boxShadow: '0 24px 80px rgba(0,0,0,0.18)', overflow: 'hidden' }
+        }}
+      >
+        <DialogTitle sx={{ bgcolor: 'background.paper', px: 3, pt: 3, pb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid', borderColor: 'divider' }}>
+          <Box>
+            <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.25 }}>
+              🔗 Generate Invitation Link
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.82rem' }}>
+              An invitation email will be sent and a link will be copied to clipboard.
+            </Typography>
+          </Box>
+          <IconButton onClick={() => setInviteDialogOpen(false)} size="small" sx={{ mt: 0.25, ml: 1 }}>
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </DialogTitle>
+
+        <DialogContent sx={{ px: 3, py: 3 }}>
+          {inviteError && <Alert severity="error" sx={{ mb: 2.5, borderRadius: '10px' }}>{inviteError}</Alert>}
+          {inviteSuccess && <Alert severity="success" sx={{ mb: 2.5, borderRadius: '10px' }}>{inviteSuccess}</Alert>}
+
+          <form id="invite-form" onSubmit={handleInviteSubmit}>
+            <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', letterSpacing: '0.05em', textTransform: 'uppercase', display: 'block', mb: 1 }}>
+              Recipient Email Address
+            </Typography>
+            <TextField
+              placeholder="colleague@institution.edu"
+              type="email"
+              value={inviteEmail}
+              onChange={e => setInviteEmail(e.target.value)}
+              fullWidth
+              required
+              autoFocus
+              size="small"
+              InputProps={{
+                sx: { borderRadius: '10px', fontSize: '0.95rem' }
+              }}
+            />
+
+            {generatedLink && (
+              <Box sx={{ mt: 3, p: 2, bgcolor: 'rgba(79,70,229,0.05)', borderRadius: '10px', border: '1px dashed', borderColor: 'primary.light' }}>
+                <Typography variant="caption" sx={{ fontWeight: 700, color: 'primary.main', display: 'block', mb: 1, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                  Invitation Link Generated
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                  <TextField
+                    size="small"
+                    value={generatedLink}
+                    fullWidth
+                    InputProps={{
+                      readOnly: true,
+                      sx: { fontSize: '0.8rem', bgcolor: '#fff', borderRadius: '8px' }
+                    }}
+                  />
+                  <Button
+                    variant="contained"
+                    size="small"
+                    onClick={() => {
+                      navigator.clipboard.writeText(generatedLink);
+                      setLinkCopied(true);
+                      setTimeout(() => setLinkCopied(false), 2000);
+                    }}
+                    sx={{ textTransform: 'none', borderRadius: '8px', flexShrink: 0, minWidth: 70 }}
+                  >
+                    {linkCopied ? '✓ Copied' : 'Copy'}
+                  </Button>
+                </Box>
+              </Box>
+            )}
+          </form>
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, py: 2.5, borderTop: '1px solid', borderColor: 'divider', gap: 1.5, justifyContent: 'flex-end' }}>
+          <Button
+            onClick={() => setInviteDialogOpen(false)}
+            sx={{ textTransform: 'none', borderRadius: '10px', color: 'text.secondary', fontWeight: 500 }}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="invite-form"
+            variant="contained"
+            disabled={inviteSubmitting}
+            sx={{ textTransform: 'none', borderRadius: '10px', px: 3, fontWeight: 600, minWidth: 180 }}
+          >
+            {inviteSubmitting
+              ? <><CircularProgress size={16} color="inherit" sx={{ mr: 1 }} /> Sending…</>
+              : 'Generate & Copy Link'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete User Confirmation Dialog */}
+      <Dialog
+        open={deleteConfirmOpen}
+        onClose={() => setDeleteConfirmOpen(false)}
+        PaperProps={{
+          sx: { borderRadius: '16px', p: 1, maxWidth: '440px' }
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 800 }}>Confirm User Deletion</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            Are you sure you want to permanently delete user <strong>{userToDelete?.name}</strong> ({userToDelete?.email})?
+          </Typography>
+          <Typography variant="caption" color="error.main" sx={{ display: 'block', fontWeight: 600 }}>
+            ⚠️ This action is irreversible and will remove all their system associations.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, gap: 1 }}>
+          <Button onClick={() => setDeleteConfirmOpen(false)} sx={{ textTransform: 'none', borderRadius: '8px', color: 'text.secondary' }}>
+            Cancel
+          </Button>
+          <Button variant="contained" color="error" onClick={handleDeleteConfirm} sx={{ textTransform: 'none', borderRadius: '8px', fontWeight: 600 }}>
+            Delete User
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Toast notifications */}
+      {toast.open && (
+        <Box sx={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999, minWidth: 300 }}>
+          <Alert severity={toast.severity} variant="filled" sx={{ borderRadius: '12px', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
+            {toast.message}
+          </Alert>
+        </Box>
       )}
 
       {/* ═══════════════════════════════════════════════════════════

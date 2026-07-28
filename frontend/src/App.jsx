@@ -23,6 +23,7 @@ import SharedWithMe from './pages/SharedWithMe';
 import Departments from './pages/Departments';
 import NotificationsPage from './pages/NotificationsPage';
 import Settings from './pages/Settings';
+import Register from './pages/Register';
 
 import { SiteTimeProvider } from './context/SiteTimeContext';
 
@@ -33,8 +34,9 @@ function App() {
         <SiteTimeProvider>
           <AuthProvider>
             <Routes>
-            {/* Public Login Page */}
+            {/* Public Login & Register Pages */}
             <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
 
             {/* Protected Application Routes */}
             <Route

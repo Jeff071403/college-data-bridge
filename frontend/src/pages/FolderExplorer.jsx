@@ -91,6 +91,7 @@ const FolderExplorer = () => {
   const [allUsers, setAllUsers] = useState([]);
   const [selectedUserForAccess, setSelectedUserForAccess] = useState(null);
   const [accessGrantState, setAccessGrantState] = useState(true);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   // File preview Modal
   const [previewFile, setPreviewFile] = useState(null);
@@ -1081,6 +1082,47 @@ const FolderExplorer = () => {
               <Button type="submit" variant="contained" disabled={!selectedUserForAccess}>Apply</Button>
             </Box>
           </form>
+
+          <Divider sx={{ my: 3 }} />
+
+          {/* Invite via Link Section */}
+          <Box sx={{ mb: 4, p: 2, bgcolor: 'action.hover', borderRadius: 2, border: '1px dashed', borderColor: 'divider' }}>
+            <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1, fontWeight: 600 }}>
+              INVITE VIA LINK
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+              Share this link with others to invite them to this {activeItem?.type || 'item'}.
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <TextField
+                fullWidth
+                size="small"
+                value={
+                  activeItem?.type === 'file' && activeItem?.data?.web_view_link
+                    ? activeItem.data.web_view_link
+                    : `${window.location.origin}/explorer?folder=${activeItem?.data?.id}`
+                }
+                InputProps={{
+                  readOnly: true,
+                  sx: { fontFamily: 'monospace', fontSize: '0.8rem' }
+                }}
+              />
+              <Button 
+                variant="outlined" 
+                onClick={() => {
+                  const url = activeItem?.type === 'file' && activeItem?.data?.web_view_link
+                    ? activeItem.data.web_view_link
+                    : `${window.location.origin}/explorer?folder=${activeItem?.data?.id}`;
+                  navigator.clipboard.writeText(url);
+                  setLinkCopied(true);
+                  setTimeout(() => setLinkCopied(false), 2000);
+                }}
+                sx={{ minWidth: 100 }}
+              >
+                {linkCopied ? "Copied!" : "Copy"}
+              </Button>
+            </Box>
+          </Box>
 
           <Divider sx={{ my: 3 }} />
 
