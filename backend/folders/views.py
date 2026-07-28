@@ -15,7 +15,56 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-User = get_user_model()
+def sync_drive_directory(parent_google_id=None, parent_folder_obj=None, user=None):
+    """
+    Fetches live folders & files from Google Drive under parent_google_id and syncs them to the DB.
+    """
+    from django.conf import settings
+    from files.models import File
+    
+    if not parent_google_id:
+        parent_google_id = getattr(settings, 'GOOGLE_DRIVE_ROOT_FOLDER_ID', None)
+        
+    if not parent_google_id:
+        return
+
+    try:
+        items = drive_service.list_folder_contents(parent_google_id)
+        for item in items:
+            item_id = item.get('id')
+            item_name = item.get('name')
+            mime_type = item.get('mimeType')
+            
+            if mime_type == 'application/vnd.google-apps.folder':
+                folder_obj, created = Folder.objects.get_or_create(
+                    google_folder_id=item_id,
+                    defaults={'name': item_name, 'parent': parent_folder_obj, 'created_by': user}
+                )
+                if not created and (folder_obj.name != item_name or folder_obj.parent != parent_folder_obj):
+                    folder_obj.name = item_name
+                    folder_obj.parent = parent_folder_obj
+                    folder_obj.save(update_fields=['name', 'parent'])
+            else:
+                if parent_folder_obj:
+                    file_obj, created = File.objects.get_or_create(
+                        google_file_id=item_id,
+                        defaults={
+                            'name': item_name,
+                            'folder': parent_folder_obj,
+                            'uploaded_by': user,
+                            'file_type': mime_type or 'application/octet-stream',
+                            'file_size': item.get('size', 0),
+                            'web_view_link': item.get('webViewLink'),
+                            'web_content_link': item.get('webContentLink')
+                        }
+                    )
+                    if not created and (file_obj.name != item_name or file_obj.folder != parent_folder_obj):
+                        file_obj.name = item_name
+                        file_obj.folder = parent_folder_obj
+                        file_obj.save(update_fields=['name', 'folder'])
+    except Exception as e:
+        logger.warning(f"Google Drive sync error for folder '{parent_google_id}': {e}")
+
 
 class FolderViewSet(viewsets.ModelViewSet):
     serializer_class = FolderSerializer
@@ -300,10 +349,13 @@ class FolderViewSet(viewsets.ModelViewSet):
             
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+
+
     @action(detail=True, methods=['get'])
     def contents(self, request, pk=None):
         """
         Returns subfolders and files inside the specified folder.
+        Fetches live items from Google Drive subfolder first.
         """
         folder = self.get_object()
         
@@ -313,6 +365,10 @@ class FolderViewSet(viewsets.ModelViewSet):
                 {"detail": "You do not have access to this folder."},
                 status=status.HTTP_403_FORBIDDEN
             )
+
+        # Sync subfolder with Google Drive
+        if folder.google_folder_id:
+            sync_drive_directory(parent_google_id=folder.google_folder_id, parent_folder_obj=folder, user=request.user)
 
         # Subfolders access filter
         subfolders = folder.children.all().order_by('name')
@@ -334,7 +390,11 @@ class FolderViewSet(viewsets.ModelViewSet):
     def root_contents(self, request):
         """
         Lists folders and files at the root level (no parent).
+        Fetches live items from Google Drive root folder first.
         """
+        # Sync with Google Drive root folder
+        sync_drive_directory(parent_google_id=None, parent_folder_obj=None, user=request.user)
+
         # Get folders at root level
         root_folders = Folder.objects.filter(parent=None).order_by('name')
         
@@ -343,10 +403,6 @@ class FolderViewSet(viewsets.ModelViewSet):
             root_folders = [f for f in root_folders if f.has_access(request.user)]
             
         subfolders_data = FolderSerializer(root_folders, many=True).data
-        
-        # Files at root are not supported in standard hierarchy but if we support files at root we query parent=None.
-        # However, requirements imply files are in folders. If we want files at root, we can support it.
-        # But we'll stick to folders having files, root only has folders. That aligns with "Company A", "Company B" folders at root.
         
         return Response({
             "subfolders": subfolders_data,
