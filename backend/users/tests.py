@@ -246,3 +246,72 @@ class DocumentManagementSystemTests(TestCase):
             'password': 'password123',
         })
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_admin_cannot_list_super_admin_users(self):
+        token = self.get_jwt_token("admin@test.edu", "password123")
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + token)
+
+        # Admin lists users
+        response = self.client.get('/api/users/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # Verify Super Admin is not in the list
+        emails = [u['email'] for u in response.data]
+        self.assertNotIn("superadmin@test.edu", emails)
+
+    def test_admin_cannot_list_super_admin_role(self):
+        token = self.get_jwt_token("admin@test.edu", "password123")
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + token)
+
+        # Admin lists roles
+        response = self.client.get('/api/roles/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Verify Super Admin role is not in the list
+        role_names = [r['name'] for r in response.data]
+        self.assertNotIn("Super Admin", role_names)
+
+    def test_admin_cannot_invite_super_admin_role(self):
+        token = self.get_jwt_token("admin@test.edu", "password123")
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + token)
+
+        # Admin tries to invite a user with Super Admin role
+        response = self.client.post('/api/users/invite/', {
+            'email': 'some_new_super@test.edu',
+            'system_role_id': self.super_admin_role.id
+        })
+        # Verify it is blocked
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_admin_cannot_view_super_admin_invitations(self):
+        # Create Super Admin invitation (by super admin)
+        from users.models import UserInvitation
+        from django.utils import timezone
+        from datetime import timedelta
+        from users.invitation_services import TokenService
+
+        expires_at = timezone.now() + timedelta(hours=24)
+        token = TokenService.generate_token('some_super_invite@test.edu', 'Aided', 'History', self.super_admin_role.id, expires_at)
+        
+        UserInvitation.objects.create(
+            email='some_super_invite@test.edu',
+            stream='Aided',
+            department='History',
+            system_role=self.super_admin_role,
+            token=token,
+            expires_at=expires_at,
+            created_by=self.super_admin
+        )
+
+        # Login as Admin
+        admin_token = self.get_jwt_token("admin@test.edu", "password123")
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + admin_token)
+
+        # Admin gets invitations list
+        response = self.client.get('/api/users/invitations/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Verify Super Admin invitation is not visible to Admin
+        results = response.data.get('results') if isinstance(response.data, dict) else response.data
+        invite_emails = [i['email'] for i in results]
+        self.assertNotIn("some_super_invite@test.edu", invite_emails)

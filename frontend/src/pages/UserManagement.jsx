@@ -468,6 +468,7 @@ const UserManagement = () => {
   const [inviteSuccess, setInviteSuccess] = useState('');
   const [generatedLink, setGeneratedLink] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
+  const [inviteSuccessDialogOpen, setInviteSuccessDialogOpen] = useState(false);
 
   // Invitation list search & filter states
   const [invitationSearch, setInvitationSearch] = useState('');
@@ -486,7 +487,11 @@ const UserManagement = () => {
       const usersRes = await api.get('/api/users/');
       setUsers(usersRes.data);
       const rolesRes = await api.get('/api/roles/');
-      setRoles(rolesRes.data);
+      let rolesData = rolesRes.data;
+      if (user?.role?.name === 'Admin') {
+        rolesData = rolesData.filter(r => r.name !== 'Super Admin');
+      }
+      setRoles(rolesData);
       const permsRes = await api.get('/api/permissions/');
       setAllPermissions(permsRes.data);
       const deptCatsRes = await api.get('/api/mous/master/dept-categories/');
@@ -736,6 +741,7 @@ const UserManagement = () => {
 
 
   const filteredUsers = users.filter((u) => {
+    if (user?.role?.name === 'Admin' && u.role?.name === 'Super Admin') return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       if (!u.name?.toLowerCase().includes(q) && !u.email?.toLowerCase().includes(q)) return false;
@@ -847,7 +853,7 @@ const UserManagement = () => {
                   <thead>
                     <tr style={{ borderBottom: '2px solid #E2E8F0', textAlign: 'left' }}>
                       <th style={{ padding: '8px 12px', fontWeight: 700 }}>Permission Name</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'center', color: '#7C3AED' }}>Super Admin</th>
+                      {user?.role?.name !== 'Admin' && <th style={{ padding: '8px 12px', textAlign: 'center', color: '#7C3AED' }}>Super Admin</th>}
                       <th style={{ padding: '8px 12px', textAlign: 'center', color: '#2563EB' }}>Admin</th>
                       <th style={{ padding: '8px 12px', textAlign: 'center', color: '#059669' }}>User</th>
                       <th style={{ padding: '8px 12px', textAlign: 'center', color: '#D97706' }}>View Only</th>
@@ -869,7 +875,7 @@ const UserManagement = () => {
                     ].map(([perm, ...vals], ri) => (
                       <tr key={perm} style={{ background: ri % 2 === 0 ? 'rgba(148,163,184,0.04)' : 'transparent' }}>
                         <td style={{ padding: '7px 12px', fontWeight: 500 }}>{perm}</td>
-                        {vals.map((v, vi) => (
+                        {vals.filter((_, vi) => user?.role?.name !== 'Admin' || vi !== 0).map((v, vi) => (
                           <td key={vi} style={{ padding: '7px 12px', textAlign: 'center' }}>
                             {v ? <span style={{ color: '#10B981', fontWeight: 700, fontSize: '1rem' }}>✓</span>
                                : <span style={{ color: '#94A3B8', fontSize: '0.9rem' }}>—</span>}
@@ -951,7 +957,7 @@ const UserManagement = () => {
                   sx={{ borderRadius: '8px', bgcolor: '#fff' }}
                 >
                   <MenuItem value="">User Type</MenuItem>
-                  <MenuItem value="Super Admin">Super Admin</MenuItem>
+                  {user?.role?.name !== 'Admin' && <MenuItem value="Super Admin">Super Admin</MenuItem>}
                   <MenuItem value="Admin / Lawyer">Admin</MenuItem>
                   <MenuItem value="Dept. Coordinator">Dept. Coordinator</MenuItem>
                   <MenuItem value="View Only">View Only</MenuItem>
@@ -1114,99 +1120,90 @@ const UserManagement = () => {
               </Button>
             </Box>
 
-            <Grid container spacing={2}>
-              {/* Search */}
-              <Grid item xs={12} sm={4}>
-                <TextField
-                  fullWidth
-                  size="small"
-                  placeholder="Search by email..."
-                  value={invitationSearch}
-                  onChange={(e) => setInvitationSearch(e.target.value)}
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <SearchIcon sx={{ color: 'text.secondary', fontSize: '1.1rem' }} />
-                      </InputAdornment>
-                    ),
-                    sx: { borderRadius: '10px', bgcolor: '#fff' }
-                  }}
-                />
-              </Grid>
+            <TextField
+              fullWidth
+              size="small"
+              placeholder="Search by email..."
+              value={invitationSearch}
+              onChange={(e) => setInvitationSearch(e.target.value)}
+              sx={{ mb: 1.5 }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon sx={{ color: 'text.secondary', fontSize: '1.1rem' }} />
+                  </InputAdornment>
+                ),
+                sx: { borderRadius: '8px', bgcolor: '#fff' }
+              }}
+            />
 
+            {/* Dropdown filters row */}
+            <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
               {/* Stream */}
-              <Grid item xs={12} sm={2}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Stream</InputLabel>
-                  <Select
-                    value={invitationFilterStream}
-                    label="Stream"
-                    onChange={(e) => setInvitationFilterStream(e.target.value)}
-                    sx={{ borderRadius: '10px', bgcolor: '#fff' }}
-                  >
-                    <MenuItem value="">All Streams</MenuItem>
-                    {deptCategories.map(c => (
-                      <MenuItem key={c.id} value={c.name}>{c.name}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
+              <FormControl size="small" sx={{ minWidth: 140 }}>
+                <InputLabel>Stream</InputLabel>
+                <Select
+                  value={invitationFilterStream}
+                  label="Stream"
+                  onChange={(e) => setInvitationFilterStream(e.target.value)}
+                  sx={{ borderRadius: '8px', bgcolor: '#fff' }}
+                >
+                  <MenuItem value="">All Streams</MenuItem>
+                  {deptCategories.map(c => (
+                    <MenuItem key={c.id} value={c.name}>{c.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
 
               {/* Department */}
-              <Grid item xs={12} sm={2}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Department</InputLabel>
-                  <Select
-                    value={invitationFilterDept}
-                    label="Department"
-                    onChange={(e) => setInvitationFilterDept(e.target.value)}
-                    sx={{ borderRadius: '10px', bgcolor: '#fff' }}
-                  >
-                    <MenuItem value="">All Depts</MenuItem>
-                    {departments.map(d => (
-                      <MenuItem key={d.id} value={d.name}>{d.name}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
+              <FormControl size="small" sx={{ minWidth: 160 }}>
+                <InputLabel>Department</InputLabel>
+                <Select
+                  value={invitationFilterDept}
+                  label="Department"
+                  onChange={(e) => setInvitationFilterDept(e.target.value)}
+                  sx={{ borderRadius: '8px', bgcolor: '#fff' }}
+                >
+                  <MenuItem value="">All Depts</MenuItem>
+                  {departments.map(d => (
+                    <MenuItem key={d.id} value={d.name}>{d.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
 
               {/* Role */}
-              <Grid item xs={12} sm={2}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Role</InputLabel>
-                  <Select
-                    value={invitationFilterRole}
-                    label="Role"
-                    onChange={(e) => setInvitationFilterRole(e.target.value)}
-                    sx={{ borderRadius: '10px', bgcolor: '#fff' }}
-                  >
-                    <MenuItem value="">All Roles</MenuItem>
-                    {roles.map(r => (
-                      <MenuItem key={r.id} value={r.id}>{r.name}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
+              <FormControl size="small" sx={{ minWidth: 130 }}>
+                <InputLabel>Role</InputLabel>
+                <Select
+                  value={invitationFilterRole}
+                  label="Role"
+                  onChange={(e) => setInvitationFilterRole(e.target.value)}
+                  sx={{ borderRadius: '8px', bgcolor: '#fff' }}
+                >
+                  <MenuItem value="">All Roles</MenuItem>
+                  {roles.map(r => (
+                    <MenuItem key={r.id} value={r.id}>{r.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
 
               {/* Status */}
-              <Grid item xs={12} sm={2}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Status</InputLabel>
-                  <Select
-                    value={invitationFilterStatus}
-                    label="Status"
-                    onChange={(e) => setInvitationFilterStatus(e.target.value)}
-                    sx={{ borderRadius: '10px', bgcolor: '#fff' }}
-                  >
-                    <MenuItem value="">All Statuses</MenuItem>
-                    <MenuItem value="Pending">Pending</MenuItem>
-                    <MenuItem value="Accepted">Accepted</MenuItem>
-                    <MenuItem value="Expired">Expired</MenuItem>
-                    <MenuItem value="Cancelled">Cancelled</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-            </Grid>
+              <FormControl size="small" sx={{ minWidth: 120 }}>
+                <InputLabel>Status</InputLabel>
+                <Select
+                  value={invitationFilterStatus}
+                  label="Status"
+                  onChange={(e) => setInvitationFilterStatus(e.target.value)}
+                  sx={{ borderRadius: '8px', bgcolor: '#fff' }}
+                >
+                  <MenuItem value="">All Statuses</MenuItem>
+                  <MenuItem value="Pending">Pending</MenuItem>
+                  <MenuItem value="Accepted">Accepted</MenuItem>
+                  <MenuItem value="Expired">Expired</MenuItem>
+                  <MenuItem value="Cancelled">Cancelled</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
           </Box>
 
           {invitationsLoading ? (
@@ -1326,7 +1323,28 @@ const UserManagement = () => {
 
         <DialogContent sx={{ px: 3, py: 3 }}>
           {inviteError && <Alert severity="error" sx={{ mb: 2.5, borderRadius: '10px' }}>{inviteError}</Alert>}
-          {inviteSuccess && <Alert severity="success" sx={{ mb: 2.5, borderRadius: '10px' }}>{inviteSuccess}</Alert>}
+
+          {inviteSuccess && (
+            <Alert severity="success" sx={{ mb: 2.5, borderRadius: '10px' }}>
+              {inviteSuccess}
+            </Alert>
+          )}
+
+          {inviteSubmitting && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 3, p: 2.5, bgcolor: 'rgba(79,70,229,0.06)', border: '1px solid', borderColor: 'rgba(79,70,229,0.18)', borderRadius: '14px' }}>
+              <dotlottie-player
+                src="/loading.lottie"
+                background="transparent"
+                speed="1.0"
+                style={{ width: '90px', height: '90px' }}
+                loop
+                autoplay
+              ></dotlottie-player>
+              <Typography variant="body2" color="primary.main" sx={{ fontWeight: 800, mt: 1, textAlign: 'center' }}>
+                Sending invitation and generating link...
+              </Typography>
+            </Box>
+          )}
 
           <form id="invite-form" onSubmit={handleInviteSubmit}>
             <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', letterSpacing: '0.05em', textTransform: 'uppercase', display: 'block', mb: 1 }}>
@@ -1336,6 +1354,7 @@ const UserManagement = () => {
               placeholder="colleague@institution.edu"
               type="email"
               value={inviteEmail}
+              disabled={inviteSubmitting}
               onChange={e => setInviteEmail(e.target.value)}
               fullWidth
               required
@@ -1398,6 +1417,38 @@ const UserManagement = () => {
               : 'Generate & Copy Link'}
           </Button>
         </DialogActions>
+      </Dialog>
+
+      {/* Invite Sending Popup Dialog */}
+      <Dialog
+        open={inviteSubmitting}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: { borderRadius: '24px', p: 3, textAlign: 'center', boxShadow: '0 24px 80px rgba(0,0,0,0.18)' }
+        }}
+      >
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', p: 1 }}>
+          <Box sx={{ width: '100%', mb: 2.5, display: 'flex', justifyContent: 'center', alignItems: 'center', borderRadius: '16px', overflow: 'hidden' }}>
+            <video
+              src="/email_Sender.mp4"
+              autoPlay
+              loop
+              muted
+              playsInline
+              style={{ width: '80%', borderRadius: '16px', maxHeight: '130px', objectFit: 'contain' }}
+            />
+          </Box>
+          <Typography variant="h5" sx={{ fontWeight: 800, mb: 1.5, color: 'primary.main' }}>
+            Sending Invitation...
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3, px: 2, lineHeight: 1.6 }}>
+            Please wait while the invitation email is being sent to <strong>{inviteEmail}</strong>...
+          </Typography>
+          <Box sx={{ width: '100%', mt: 2, display: 'flex', justifyContent: 'center' }}>
+            <CircularProgress size={24} />
+          </Box>
+        </DialogContent>
       </Dialog>
 
       {/* Delete User Confirmation Dialog */}

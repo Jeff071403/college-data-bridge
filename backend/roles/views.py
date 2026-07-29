@@ -8,3 +8,10 @@ class RoleViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = RoleSerializer
     permission_classes = [HasDynamicPermission]
     required_permission = 'manage_users'
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = Role.objects.all().order_by('name')
+        if user.is_authenticated and user.role and user.role.name == 'Admin':
+            queryset = queryset.exclude(name='Super Admin')
+        return queryset

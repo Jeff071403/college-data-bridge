@@ -19,7 +19,10 @@ class FolderPermissionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = FolderPermission
-        fields = ['id', 'user', 'user_id', 'is_granted']
+        fields = [
+            'id', 'user', 'user_id', 'is_granted',
+            'can_read', 'can_download', 'can_upload', 'can_delete_own_uploads'
+        ]
 
 class FolderSerializer(serializers.ModelSerializer):
     created_by = UserMinimalSerializer(read_only=True)
@@ -40,7 +43,7 @@ class FolderSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'parent_id', 'created_by', 
             'created_at', 'updated_at', 'subfolder_count', 
-            'file_count', 'path', 'google_folder_id'
+            'file_count', 'path', 'google_folder_id', 'status'
         ]
         read_only_fields = ['created_by', 'created_at', 'updated_at']
 

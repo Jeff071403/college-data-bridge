@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Dialog, DialogTitle, DialogContent, DialogActions, 
   Button, Typography, Box, List, ListItem, ListItemText, 
@@ -16,6 +16,32 @@ const FilePreviewModal = ({ open, onClose, file, onRefresh }) => {
   const { user, hasPermission } = useAuth();
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
+  const [previewBlobUrl, setPreviewBlobUrl] = useState('');
+
+  useEffect(() => {
+    if (!open || !file) return;
+    setError(null);
+    if (file.file_url) {
+      setPreviewBlobUrl(file.file_url);
+    } else {
+      api.get(`/api/files/${file.id}/preview/`, { responseType: 'blob' })
+        .then(res => {
+          const url = window.URL.createObjectURL(new Blob([res.data], { type: file.mime_type || file.file_type }));
+          setPreviewBlobUrl(url);
+        })
+        .catch(err => {
+          console.error("Preview fetch failed:", err);
+          setError("Failed to load document preview.");
+        });
+    }
+
+    return () => {
+      if (previewBlobUrl && !previewBlobUrl.startsWith('http')) {
+        window.URL.revokeObjectURL(previewBlobUrl);
+      }
+      setPreviewBlobUrl('');
+    };
+  }, [open, file]);
 
   if (!file) return null;
 
@@ -107,16 +133,20 @@ const FilePreviewModal = ({ open, onClose, file, onRefresh }) => {
           {isImage ? (
             <Box 
               component="img" 
-              src={file.file_url} 
+              src={previewBlobUrl} 
               alt={file.name} 
               sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
             />
           ) : isPdf && canPreviewPdf ? (
-            <iframe 
-              src={`${file.file_url}#toolbar=0`} 
-              title="pdf-preview" 
-              style={{ width: '100%', height: '100%', border: 'none' }}
-            />
+            previewBlobUrl ? (
+              <iframe 
+                src={`${previewBlobUrl}#toolbar=0`} 
+                title="pdf-preview" 
+                style={{ width: '100%', height: '100%', border: 'none' }}
+              />
+            ) : (
+              <Typography color="grey.300">Loading preview...</Typography>
+            )
           ) : isPdf && !canPreviewPdf ? (
             <Box sx={{ color: 'grey.500', textAlign: 'center', p: 3 }}>
               <InsertDriveFileIcon sx={{ fontSize: 100, mb: 2 }} />

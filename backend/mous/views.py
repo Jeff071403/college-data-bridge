@@ -901,6 +901,12 @@ class TemplateCollectionViewSet(viewsets.ModelViewSet):
         if not file_type:
             file_type = "application/pdf"
 
+        if hasattr(doc_file, 'seek'):
+            try:
+                doc_file.seek(0)
+            except Exception:
+                pass
+
         from services import drive_service
         logger.info(f"Triggering template document file upload to Google Drive. File: '{doc_file.name}' under root folder...")
         drive_meta = drive_service.upload_file(
@@ -911,11 +917,18 @@ class TemplateCollectionViewSet(viewsets.ModelViewSet):
         )
         logger.info(f"Template document file upload successful. Metadata: {drive_meta}")
 
+        if hasattr(doc_file, 'seek'):
+            try:
+                doc_file.seek(0)
+            except Exception:
+                pass
+
         doc = TemplateDocument.objects.create(
             template_collection=collection,
             document_name=doc_name,
             document_type=doc_type,
             google_file_id=drive_meta['id'],
+            file_path=doc_file,
             version=version,
             effective_date=effective_date,
             expiry_date=expiry_date,
@@ -934,6 +947,56 @@ class TemplateDocumentViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = TemplateDocument.objects.all().order_by('-uploaded_at')
     serializer_class = TemplateDocumentSerializer
+
+    @action(detail=True, methods=['get'])
+    def download(self, request, pk=None):
+        import io
+        import os
+        from django.http import FileResponse, Http404
+        doc = self.get_object()
+        
+        # Serve local file if exists
+        if doc.file_path and os.path.exists(doc.file_path.path):
+            response = FileResponse(open(doc.file_path.path, 'rb'), as_attachment=True)
+            response['Content-Disposition'] = f'attachment; filename="{doc.document_name}.pdf"'
+            response['Content-Type'] = 'application/pdf'
+            return response
+
+        if not doc.google_file_id or doc.google_file_id.startswith('drive_file_'):
+            raise Http404("Document does not exist on storage.")
+
+        try:
+            file_bytes = drive_service.download_file(doc.google_file_id)
+            response = FileResponse(io.BytesIO(file_bytes), as_attachment=True)
+            response['Content-Disposition'] = f'attachment; filename="{doc.document_name}.pdf"'
+            response['Content-Type'] = 'application/pdf'
+            return response
+        except Exception as e:
+            return Response({"detail": f"Failed to download template from Google Drive: {str(e)}"}, status=500)
+
+    @action(detail=True, methods=['get'])
+    def preview(self, request, pk=None):
+        import io
+        import os
+        from django.http import FileResponse, Http404
+        doc = self.get_object()
+        
+        # Serve local file if exists
+        if doc.file_path and os.path.exists(doc.file_path.path):
+            response = FileResponse(open(doc.file_path.path, 'rb'), as_attachment=False)
+            response['Content-Type'] = 'application/pdf'
+            return response
+
+        if not doc.google_file_id or doc.google_file_id.startswith('drive_file_'):
+            raise Http404("Document does not exist on storage.")
+
+        try:
+            file_bytes = drive_service.download_file(doc.google_file_id)
+            response = FileResponse(io.BytesIO(file_bytes), as_attachment=False)
+            response['Content-Type'] = 'application/pdf'
+            return response
+        except Exception as e:
+            return Response({"detail": f"Failed to preview template from Google Drive: {str(e)}"}, status=500)
 
     @action(detail=True, methods=['get'], url_path='log-preview')
     def log_preview(self, request, pk=None):

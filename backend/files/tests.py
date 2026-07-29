@@ -248,3 +248,55 @@ class FileSyncAPITests(APITestCase):
         
         response = self.client.post(url, data, format='multipart')
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_file_download_falls_back_to_local_storage(self):
+        import os
+        from django.core.files.base import ContentFile
+        file_instance = File.objects.create(
+            name="local_only.pdf",
+            size=18,
+            file_type="application/pdf",
+            google_file_id="drive_file_mock_123",
+            folder=self.folder,
+            uploaded_by=self.admin_user
+        )
+        file_instance.file_field.save("local_only.pdf", ContentFile(b"local pdf content"))
+        file_instance.save()
+
+        url = reverse('file-download', kwargs={'pk': file_instance.id})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.getvalue(), b"local pdf content")
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+
+        if file_instance.file_field and os.path.exists(file_instance.file_field.path):
+            try:
+                os.remove(file_instance.file_field.path)
+            except Exception:
+                pass
+
+    def test_file_preview_falls_back_to_local_storage(self):
+        import os
+        from django.core.files.base import ContentFile
+        file_instance = File.objects.create(
+            name="local_preview.pdf",
+            size=22,
+            file_type="application/pdf",
+            google_file_id="drive_file_mock_456",
+            folder=self.folder,
+            uploaded_by=self.admin_user
+        )
+        file_instance.file_field.save("local_preview.pdf", ContentFile(b"local preview content"))
+        file_instance.save()
+
+        url = reverse('file-preview', kwargs={'pk': file_instance.id})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.getvalue(), b"local preview content")
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+
+        if file_instance.file_field and os.path.exists(file_instance.file_field.path):
+            try:
+                os.remove(file_instance.file_field.path)
+            except Exception:
+                pass

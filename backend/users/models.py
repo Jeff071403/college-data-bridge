@@ -42,6 +42,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     designation = models.CharField(max_length=100, blank=True, null=True)
     department = models.CharField(max_length=100, blank=True, null=True)
     stream = models.CharField(max_length=100, blank=True, null=True)
+    company_name = models.CharField(max_length=200, blank=True, null=True)
     
     role = models.ForeignKey(Role, on_delete=models.SET_NULL, null=True, related_name='users')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Active')

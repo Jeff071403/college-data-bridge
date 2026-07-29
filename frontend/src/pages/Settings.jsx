@@ -57,7 +57,22 @@ const MasterDataTab = () => {
   const [activeSubTab, setActiveSubTab] = useState(0);
   const [mdLoading, setMdLoading] = useState(false);
   const [mdError, setMdError] = useState(null);
+  const [mdSuccess, setMdSuccess] = useState(null);
   const [mdData, setMdData] = useState([]);
+
+  useEffect(() => {
+    if (mdError) {
+      const timer = setTimeout(() => setMdError(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [mdError]);
+
+  useEffect(() => {
+    if (mdSuccess) {
+      const timer = setTimeout(() => setMdSuccess(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [mdSuccess]);
   const [deptCategories, setDeptCategories] = useState([]);
   const [mdOpen, setMdOpen] = useState(false);
   const [mdEditId, setMdEditId] = useState(null);
@@ -132,7 +147,11 @@ const MasterDataTab = () => {
 
   const handleMdDelete = async (id, name) => {
     if (!window.confirm(`Delete "${name}"? Items linked to active records cannot be removed — deactivate them instead.`)) return;
-    try { await currentMdTab.del(id); loadMdData(); }
+    try {
+      await currentMdTab.del(id);
+      setMdSuccess(`"${name}" deleted successfully.`);
+      loadMdData();
+    }
     catch (err) { setMdError(extractError(err)); }
   };
 
@@ -158,6 +177,16 @@ const MasterDataTab = () => {
           onClose={() => setMdError(null)}
         >
           {mdError}
+        </Alert>
+      )}
+
+      {mdSuccess && (
+        <Alert
+          severity="success"
+          sx={{ mb: 2, borderRadius: '12px' }}
+          onClose={() => setMdSuccess(null)}
+        >
+          {mdSuccess}
         </Alert>
       )}
 

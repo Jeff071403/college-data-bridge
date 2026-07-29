@@ -404,7 +404,7 @@ const MOUDetail = () => {
                   <Button 
                     size="small" 
                     startIcon={<CloudDownloadIcon />} 
-                    href={mou.original_mou_details.web_view_link || mou.original_mou_details.file_url} 
+                    href={mou.original_mou_details.file_url || mou.original_mou_details.web_view_link} 
                     target="_blank"
                   >
                     View / Download
@@ -427,7 +427,7 @@ const MOUDetail = () => {
                     size="small" 
                     color="success" 
                     startIcon={<CloudDownloadIcon />} 
-                    href={mou.signed_mou_details.web_view_link || mou.signed_mou_details.file_url} 
+                    href={mou.signed_mou_details.file_url || mou.signed_mou_details.web_view_link} 
                     target="_blank"
                   >
                     View / Download

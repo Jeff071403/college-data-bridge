@@ -26,6 +26,21 @@ const MasterData = () => {
   const [activeTab, setActiveTab] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
+
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => setError(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(() => setSuccess(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [success]);
   const [data, setData] = useState([]);
   const [deptCategories, setDeptCategories] = useState([]); // Loaded for departments categorization
 
@@ -128,6 +143,7 @@ const MasterData = () => {
     if (window.confirm('Are you sure you want to delete this option? Lookups already bound to active documents cannot be removed.')) {
       try {
         await currentTab.delete(id);
+        setSuccess('Option deleted successfully.');
         loadData();
       } catch (err) {
         console.error(err);
@@ -159,7 +175,8 @@ const MasterData = () => {
         </Button>
       </Box>
 
-      {error && <Alert severity="error" sx={{ mb: 3, borderRadius: '12px' }}>{error}</Alert>}
+      {error && <Alert severity="error" sx={{ mb: 3, borderRadius: '12px' }} onClose={() => setError(null)}>{error}</Alert>}
+      {success && <Alert severity="success" sx={{ mb: 3, borderRadius: '12px' }} onClose={() => setSuccess(null)}>{success}</Alert>}
 
       {/* Tabs Menu */}
       <Card sx={{ borderRadius: '16px', border: '1px solid', borderColor: 'divider', mb: 3 }}>

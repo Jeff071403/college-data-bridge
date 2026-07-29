@@ -95,12 +95,21 @@ class FileViewSet(viewsets.ModelViewSet):
         # Share permission restriction (unless user created the folder)
         is_admin = request.user.role and request.user.role.name in ["Super Admin", "Admin"]
         if not is_admin and folder.created_by != request.user:
-            share_perm = get_mou_share_permission(request.user, folder)
-            if share_perm == 'View Only':
-                return Response(
-                    {"detail": "You only have View Only access and cannot upload files here."},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+            from folders.models import FolderPermission
+            explicit_perm = FolderPermission.objects.filter(user=request.user, folder=folder).first()
+            if explicit_perm:
+                if not explicit_perm.can_upload:
+                    return Response(
+                        {"detail": "You do not have upload permission on this folder."},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+            else:
+                share_perm = get_mou_share_permission(request.user, folder)
+                if share_perm == 'View Only':
+                    return Response(
+                        {"detail": "You only have View Only access and cannot upload files here."},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
 
         # Extract file info
         name = uploaded_file.name
@@ -111,14 +120,27 @@ class FileViewSet(viewsets.ModelViewSet):
             file_type = "application/octet-stream"
 
         try:
+            if hasattr(uploaded_file, 'seek'):
+                try:
+                    uploaded_file.seek(0)
+                except Exception:
+                    pass
+
             with transaction.atomic():
                 file_instance = File.objects.create(
                     name=name,
                     size=size,
                     file_type=file_type,
                     folder=folder,
-                    uploaded_by=request.user
+                    uploaded_by=request.user,
+                    file_field=uploaded_file
                 )
+
+                if hasattr(uploaded_file, 'seek'):
+                    try:
+                        uploaded_file.seek(0)
+                    except Exception:
+                        pass
 
                 # Mandatory Google Drive Upload
                 logger.info(f"Triggering upload to Google Drive for file '{name}' under folder '{folder.name}' (Google Folder ID: {folder.google_folder_id})...")
@@ -132,8 +154,8 @@ class FileViewSet(viewsets.ModelViewSet):
                 file_instance.google_file_id = drive_metadata['id']
                 file_instance.mime_type = drive_metadata['mimeType']
                 file_instance.file_size = drive_metadata['size']
-                file_instance.web_view_link = drive_metadata['webViewLink']
-                file_instance.web_content_link = drive_metadata['webContentLink']
+                file_instance.web_view_link = drive_metadata.get('webViewLink') or drive_metadata.get('web_view_link')
+                file_instance.web_content_link = drive_metadata.get('webContentLink') or drive_metadata.get('web_content_link')
                 file_instance.save(update_fields=[
                     'google_file_id', 'mime_type', 'file_size',
                     'web_view_link', 'web_content_link'
@@ -206,6 +228,25 @@ class FileViewSet(viewsets.ModelViewSet):
         if not can_manage:
             return Response({"detail": "You do not have access to delete this file."}, status=status.HTTP_403_FORBIDDEN)
             
+        # Share permission restriction (unless user created the folder)
+        is_admin = request.user.role and request.user.role.name in ["Super Admin", "Admin"]
+        if not is_admin and file_instance.folder.created_by != request.user:
+            from folders.models import FolderPermission
+            explicit_perm = FolderPermission.objects.filter(user=request.user, folder=file_instance.folder).first()
+            if explicit_perm:
+                if not explicit_perm.can_upload:
+                    return Response(
+                        {"detail": "You do not have permission to delete files in this folder."},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+            else:
+                share_perm = get_mou_share_permission(request.user, file_instance.folder)
+                if share_perm in ['View Only', 'Upload Only']:
+                    return Response(
+                        {"detail": "You only have read/upload access and cannot delete files here."},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+            
         name = file_instance.name
         folder_name = file_instance.folder.name
         google_file_id = file_instance.google_file_id
@@ -256,12 +297,14 @@ class FileViewSet(viewsets.ModelViewSet):
         if not can_view:
             return Response({"detail": "You do not have access to download this file."}, status=status.HTTP_403_FORBIDDEN)
 
-        # Check if Google File ID is stored
-        if not file_instance.google_file_id:
-            if file_instance.file_field and os.path.exists(file_instance.file_field.path):
-                response = FileResponse(open(file_instance.file_field.path, 'rb'), as_attachment=True)
-                response['Content-Disposition'] = f'attachment; filename="{file_instance.name}"'
-                return response
+        # Check if local file exists first (extremely fast and robust fallback)
+        if file_instance.file_field and os.path.exists(file_instance.file_field.path):
+            response = FileResponse(open(file_instance.file_field.path, 'rb'), as_attachment=True)
+            response['Content-Disposition'] = f'attachment; filename="{file_instance.name}"'
+            response['Content-Type'] = file_instance.mime_type or file_instance.file_type
+            return response
+
+        if not file_instance.google_file_id or file_instance.google_file_id.startswith('drive_file_'):
             raise Http404("File does not exist on storage.")
 
         try:
@@ -291,12 +334,13 @@ class FileViewSet(viewsets.ModelViewSet):
         if not can_view:
             return Response({"detail": "You do not have access to preview this file."}, status=status.HTTP_403_FORBIDDEN)
 
-        # Check if Google File ID is stored
-        if not file_instance.google_file_id:
-            if file_instance.file_field and os.path.exists(file_instance.file_field.path):
-                response = FileResponse(open(file_instance.file_field.path, 'rb'), as_attachment=False)
-                response['Content-Type'] = file_instance.file_type
-                return response
+        # Check if local file exists first (extremely fast and robust fallback)
+        if file_instance.file_field and os.path.exists(file_instance.file_field.path):
+            response = FileResponse(open(file_instance.file_field.path, 'rb'), as_attachment=False)
+            response['Content-Type'] = file_instance.mime_type or file_instance.file_type
+            return response
+
+        if not file_instance.google_file_id or file_instance.google_file_id.startswith('drive_file_'):
             raise Http404("File does not exist on storage.")
 
         try:
@@ -349,12 +393,21 @@ class FileViewSet(viewsets.ModelViewSet):
         # Share permission restriction
         is_admin = request.user.role and request.user.role.name in ["Super Admin", "Admin"]
         if not is_admin:
-            share_perm = get_mou_share_permission(request.user, file_instance.folder)
-            if share_perm in ['View Only', 'Upload Only']:
-                return Response(
-                    {"detail": "You do not have permission to replace files in this folder."},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+            from folders.models import FolderPermission
+            explicit_perm = FolderPermission.objects.filter(user=request.user, folder=file_instance.folder).first()
+            if explicit_perm:
+                if not explicit_perm.can_upload:
+                    return Response(
+                        {"detail": "You do not have permission to replace files in this folder."},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+            else:
+                share_perm = get_mou_share_permission(request.user, file_instance.folder)
+                if share_perm in ['View Only', 'Upload Only']:
+                    return Response(
+                        {"detail": "You do not have permission to replace files in this folder."},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
 
         if not uploaded_file:
             return Response({"file": ["No replacement file was uploaded."]}, status=status.HTTP_400_BAD_REQUEST)
@@ -367,6 +420,12 @@ class FileViewSet(viewsets.ModelViewSet):
             file_type = "application/octet-stream"
 
         try:
+            if hasattr(uploaded_file, 'seek'):
+                try:
+                    uploaded_file.seek(0)
+                except Exception:
+                    pass
+
             with transaction.atomic():
                 # 1. Archive the current file version to FileVersion database table
                 FileVersion.objects.create(
@@ -376,8 +435,15 @@ class FileViewSet(viewsets.ModelViewSet):
                     size=file_instance.size,
                     file_type=file_instance.file_type,
                     uploaded_by=file_instance.uploaded_by,
-                    google_file_id=file_instance.google_file_id
+                    google_file_id=file_instance.google_file_id,
+                    file_field=file_instance.file_field
                 )
+
+                if hasattr(uploaded_file, 'seek'):
+                    try:
+                        uploaded_file.seek(0)
+                    except Exception:
+                        pass
 
                 # 2. Upload new version file to Google Drive under the parent folder
                 logger.info(f"Triggering replacement file upload to Google Drive. File: '{name}', folder: '{file_instance.folder.name}' (Google Folder ID: {file_instance.folder.google_folder_id})...")
@@ -395,12 +461,13 @@ class FileViewSet(viewsets.ModelViewSet):
                 file_instance.file_type = file_type
                 file_instance.uploaded_by = request.user
                 file_instance.version_number += 1
+                file_instance.file_field = uploaded_file
                 
                 file_instance.google_file_id = drive_metadata['id']
                 file_instance.mime_type = drive_metadata['mimeType']
                 file_instance.file_size = drive_metadata['size']
-                file_instance.web_view_link = drive_metadata['webViewLink']
-                file_instance.web_content_link = drive_metadata['webContentLink']
+                file_instance.web_view_link = drive_metadata.get('webViewLink') or drive_metadata.get('web_view_link')
+                file_instance.web_content_link = drive_metadata.get('webContentLink') or drive_metadata.get('web_content_link')
                 file_instance.save()
 
                 # Support custom creation date/time

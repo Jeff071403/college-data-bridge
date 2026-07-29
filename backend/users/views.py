@@ -56,6 +56,13 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all().order_by('-created_at')
     permission_classes = [HasDynamicPermission]
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = User.objects.all().order_by('-created_at')
+        if user.is_authenticated and user.role and user.role.name == 'Admin':
+            queryset = queryset.exclude(role__name='Super Admin')
+        return queryset
     
     # Define permission requirements for custom permissions check
     action_permissions = {
@@ -242,6 +249,9 @@ class UserViewSet(viewsets.ModelViewSet):
         if not role:
             return Response({"detail": "No default system role found in the database. Please create a role first."}, status=status.HTTP_400_BAD_REQUEST)
             
+        if request.user.role and request.user.role.name == 'Admin' and role.name == 'Super Admin':
+            return Response({"detail": "Admins cannot invite users with the Super Admin role."}, status=status.HTTP_403_FORBIDDEN)
+            
         try:
             invitation = InvitationService.create_invitation(
                 email=email,
@@ -261,6 +271,8 @@ class UserViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='invitations')
     def invitations(self, request):
         queryset = UserInvitation.objects.all().order_by('-created_at')
+        if request.user.role and request.user.role.name == 'Admin':
+            queryset = queryset.exclude(system_role__name='Super Admin')
         
         # Search & filters
         search = request.query_params.get('search')
@@ -396,6 +408,7 @@ class UserViewSet(viewsets.ModelViewSet):
         designation = serializer.validated_data.get('designation', '')
         stream_val = serializer.validated_data.get('stream', '')
         department_val = serializer.validated_data.get('department', '')
+        company_name = serializer.validated_data.get('company_name', '')
         
         invitation = get_object_or_404(UserInvitation, token=token)
         now = timezone.now()
@@ -418,6 +431,7 @@ class UserViewSet(viewsets.ModelViewSet):
                     designation=designation,
                     department=invitation.department or department_val,
                     stream=invitation.stream or stream_val,
+                    company_name=company_name,
                     role=invitation.system_role,
                     status='Active'
                 )

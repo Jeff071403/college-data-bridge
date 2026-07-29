@@ -34,7 +34,7 @@ import LocalHospitalIcon from '@mui/icons-material/LocalHospital';
 import BusinessCenterIcon from '@mui/icons-material/BusinessCenter';
 import PaletteIcon from '@mui/icons-material/Palette';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -92,11 +92,24 @@ const CountUp = ({ end, duration = 1000 }) => {
 const Dashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [previewFile, setPreviewFile] = useState(null);
   const [showPopup, setShowPopup] = useState(false);
   const [checkedPopup, setCheckedPopup] = useState(false);
+  const [successMsg, setSuccessMsg] = useState(location.state?.successMessage || '');
+
+  useEffect(() => {
+    if (successMsg) {
+      const timer = setTimeout(() => {
+        setSuccessMsg('');
+        // Clean up window history state to prevent showing it again on reload
+        window.history.replaceState({}, document.title);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMsg]);
 
   const fetchStats = async () => {
     try {
@@ -162,6 +175,11 @@ const Dashboard = () => {
 
   return (
     <Box sx={{ flexGrow: 1 }} className="animate-fade-slide-up">
+      {successMsg && (
+        <Alert severity="success" sx={{ mb: 3.5, borderRadius: '12px' }} onClose={() => setSuccessMsg('')}>
+          {successMsg}
+        </Alert>
+      )}
 
       {/* ── Top Header Hero Banner ── */}
       <Box

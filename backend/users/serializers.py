@@ -41,11 +41,17 @@ class CustomUserSerializer(serializers.ModelSerializer):
     permissions_override = UserPermissionSerializer(source='user_permissions_override', many=True, read_only=True)
     active_permissions = serializers.SerializerMethodField()
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get('request')
+        if request and request.user.is_authenticated and request.user.role and request.user.role.name == 'Admin':
+            self.fields['role_id'].queryset = Role.objects.exclude(name='Super Admin')
+
     class Meta:
         model = User
         fields = [
             'id', 'email', 'name', 'phone', 'designation', 
-            'department', 'stream', 'role', 'role_id', 'status', 
+            'department', 'stream', 'company_name', 'role', 'role_id', 'status', 
             'last_login', 'created_at', 'updated_at',
             'permissions_override', 'active_permissions'
         ]
@@ -62,6 +68,12 @@ class CustomUserCreateSerializer(serializers.ModelSerializer):
         required=True
     )
     password = serializers.CharField(write_only=True)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get('request')
+        if request and request.user.is_authenticated and request.user.role and request.user.role.name == 'Admin':
+            self.fields['role_id'].queryset = Role.objects.exclude(name='Super Admin')
 
     class Meta:
         model = User
@@ -97,6 +109,12 @@ class UserInvitationSerializer(serializers.ModelSerializer):
     created_by_email = serializers.EmailField(source='created_by.email', read_only=True)
     status = serializers.SerializerMethodField()
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get('request')
+        if request and request.user.is_authenticated and request.user.role and request.user.role.name == 'Admin':
+            self.fields['system_role_id'].queryset = Role.objects.exclude(name='Super Admin')
+
     class Meta:
         model = UserInvitation
         fields = [
@@ -127,6 +145,7 @@ class UserRegistrationSerializer(serializers.Serializer):
     designation = serializers.CharField(required=False, max_length=100, allow_blank=True, allow_null=True)
     stream = serializers.CharField(required=False, max_length=100, allow_blank=True, allow_null=True)
     department = serializers.CharField(required=False, max_length=100, allow_blank=True, allow_null=True)
+    company_name = serializers.CharField(required=False, max_length=200, allow_blank=True, allow_null=True)
 
     def validate_password(self, value):
         if len(value) < 8:

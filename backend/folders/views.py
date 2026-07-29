@@ -127,12 +127,21 @@ class FolderViewSet(viewsets.ModelViewSet):
             # Share permission restriction
             is_admin = request.user.role and request.user.role.name in ["Super Admin", "Admin"]
             if not is_admin and parent_folder.created_by != request.user:
-                share_perm = get_mou_share_permission(request.user, parent_folder)
-                if share_perm in ['View Only', 'Upload Only']:
-                    return Response(
-                        {"detail": "You only have read/upload access and cannot create subfolders here."},
-                        status=status.HTTP_403_FORBIDDEN
-                    )
+                from folders.models import FolderPermission
+                explicit_perm = FolderPermission.objects.filter(user=request.user, folder=parent_folder).first()
+                if explicit_perm:
+                    if not explicit_perm.can_upload:
+                        return Response(
+                            {"detail": "You only have read/view access and cannot create subfolders here."},
+                            status=status.HTTP_403_FORBIDDEN
+                        )
+                else:
+                    share_perm = get_mou_share_permission(request.user, parent_folder)
+                    if share_perm in ['View Only', 'Upload Only']:
+                        return Response(
+                            {"detail": "You only have read/upload access and cannot create subfolders here."},
+                            status=status.HTTP_403_FORBIDDEN
+                        )
 
         try:
             with transaction.atomic():
@@ -185,12 +194,21 @@ class FolderViewSet(viewsets.ModelViewSet):
         # Share permission restriction (unless user created the folder)
         is_admin = request.user.role and request.user.role.name in ["Super Admin", "Admin"]
         if not is_admin and folder.created_by != request.user:
-            share_perm = get_mou_share_permission(request.user, folder)
-            if share_perm in ['View Only', 'Upload Only']:
-                return Response(
-                    {"detail": "You only have read/upload access and cannot edit folders here."},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+            from folders.models import FolderPermission
+            explicit_perm = FolderPermission.objects.filter(user=request.user, folder=folder).first()
+            if explicit_perm:
+                if not explicit_perm.can_upload:
+                    return Response(
+                        {"detail": "You do not have permission to edit this folder."},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+            else:
+                share_perm = get_mou_share_permission(request.user, folder)
+                if share_perm in ['View Only', 'Upload Only']:
+                    return Response(
+                        {"detail": "You only have read/upload access and cannot edit folders here."},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
             
         try:
             with transaction.atomic():
@@ -226,12 +244,21 @@ class FolderViewSet(viewsets.ModelViewSet):
         # Share permission restriction (unless user created the folder)
         is_admin = request.user.role and request.user.role.name in ["Super Admin", "Admin"]
         if not is_admin and folder.created_by != request.user:
-            share_perm = get_mou_share_permission(request.user, folder)
-            if share_perm in ['View Only', 'Upload Only']:
-                return Response(
-                    {"detail": "You only have read/upload access and cannot delete folders here."},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+            from folders.models import FolderPermission
+            explicit_perm = FolderPermission.objects.filter(user=request.user, folder=folder).first()
+            if explicit_perm:
+                if not explicit_perm.can_upload:
+                    return Response(
+                        {"detail": "You do not have permission to delete this folder."},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+            else:
+                share_perm = get_mou_share_permission(request.user, folder)
+                if share_perm in ['View Only', 'Upload Only']:
+                    return Response(
+                        {"detail": "You only have read/upload access and cannot delete folders here."},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
             
         folder_name = folder.name
         google_folder_id = folder.google_folder_id
@@ -551,11 +578,22 @@ class FolderViewSet(viewsets.ModelViewSet):
             
         target_user = get_object_or_404(User, id=user_id)
         
-        # Create or update access rule
+        # Create or update access rule with granular permissions
+        can_read = request.data.get('can_read', True)
+        can_download = request.data.get('can_download', True)
+        can_upload = request.data.get('can_upload', False)
+        can_delete_own_uploads = request.data.get('can_delete_own_uploads', False)
+        
         folder_perm, created = FolderPermission.objects.update_or_create(
             user=target_user,
             folder=folder,
-            defaults={'is_granted': is_granted}
+            defaults={
+                'is_granted': is_granted,
+                'can_read': can_read,
+                'can_download': can_download,
+                'can_upload': can_upload,
+                'can_delete_own_uploads': can_delete_own_uploads,
+            }
         )
         
         action_type = "granted" if is_granted else "revoked"

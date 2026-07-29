@@ -54,8 +54,8 @@ const Login = () => {
     setError('');
 
     try {
-      await login(email, password);
-      navigate('/');
+      const loggedUser = await login(email, password);
+      navigate('/', { state: { successMessage: `Logged in successfully! Welcome back, ${loggedUser.name || 'user'}.` } });
     } catch (err) {
       console.error("Login failed:", err);
       setError(

@@ -16,6 +16,7 @@ import EmailIcon from '@mui/icons-material/Email';
 import CloudQueueIcon from '@mui/icons-material/CloudQueue';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
+import BusinessIcon from '@mui/icons-material/Business';
 
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -36,10 +37,10 @@ const Register = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [phone, setPhone] = useState('');
   const [designation, setDesignation] = useState('');
+  const [companyName, setCompanyName] = useState('');
   const [stream, setStream] = useState('');
   const [department, setDepartment] = useState('');
   const [filteredDepts, setFilteredDepts] = useState([]);
-  const [acceptTerms, setAcceptTerms] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
@@ -146,9 +147,7 @@ const Register = () => {
     return 'Passwords match & all rules satisfied!';
   };
 
-  const isFormValid = name.trim() && acceptTerms && checkCount === 6 && 
-    (invitation?.stream ? true : stream) && 
-    (invitation?.department ? true : department);
+  const isFormValid = name.trim() && checkCount === 6;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -157,7 +156,7 @@ const Register = () => {
     setSubmitting(true);
     setFormError('');
 
-    const resolvedStream = invitation?.stream || (deptCategories.find(c => c.id === stream)?.name || stream);
+    const resolvedStream = invitation?.stream || (deptCategories.find(c => c.id === stream)?.name || stream || '');
 
     try {
       await api.post('/api/users/register/', {
@@ -167,7 +166,8 @@ const Register = () => {
         phone,
         designation,
         stream: resolvedStream,
-        department: invitation?.department || department
+        department: invitation?.department || department || '',
+        company_name: companyName
       });
       
       // Redirect to login page using full page transition
@@ -364,11 +364,27 @@ const Register = () => {
                 }}
               />
 
+              {/* Company Name */}
+              <TextField
+                label="Company Name (Optional)"
+                placeholder="Enter company name..."
+                value={companyName}
+                onChange={e => setCompanyName(e.target.value)}
+                fullWidth
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <BusinessIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
+                    </InputAdornment>
+                  )
+                }}
+              />
+
               {/* Dynamic Stream and Department selectors (if not pre-defined in invitation) */}
               {!invitation?.stream && (
                 <Grid container spacing={2}>
                   <Grid item xs={12} sm={6}>
-                    <FormControl fullWidth required>
+                    <FormControl fullWidth>
                       <InputLabel>Stream</InputLabel>
                       <Select
                         value={stream}
@@ -384,7 +400,7 @@ const Register = () => {
                   </Grid>
 
                   <Grid item xs={12} sm={6}>
-                    <FormControl fullWidth required disabled={!stream}>
+                    <FormControl fullWidth disabled={!stream}>
                       <InputLabel>Department</InputLabel>
                       <Select
                         value={department}
@@ -481,21 +497,7 @@ const Register = () => {
                 </Box>
               )}
 
-              {/* Terms Checkbox */}
-              <FormControlLabel
-                control={
-                  <Checkbox 
-                    checked={acceptTerms} 
-                    onChange={e => setAcceptTerms(e.target.checked)} 
-                    color="primary"
-                  />
-                }
-                label={
-                  <Typography variant="body2" color="text.secondary">
-                    I accept the <Link href="#" underline="hover" color="primary">Terms of Service</Link> and <Link href="#" underline="hover" color="primary">Privacy Guidelines</Link> of MCC.
-                  </Typography>
-                }
-              />
+
 
               {/* Submit Button */}
               <Button

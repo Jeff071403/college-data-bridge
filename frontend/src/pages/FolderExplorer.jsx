@@ -40,6 +40,23 @@ const FolderExplorer = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const searchParamQuery = searchParams.get('search') || '';
 
+  const getFolderStatusColor = (status) => {
+    switch (status) {
+      case 'Active':
+        return '#8B5CF6';
+      case 'Signed':
+        return '#10B981';
+      case 'Pending Review':
+        return '#F59E0B';
+      case 'Expired':
+        return '#EF4444';
+      case 'Archived':
+        return '#475569';
+      default:
+        return '#8B5CF6';
+    }
+  };
+
   const folderParam = searchParams.get('folder');
   const currentFolderId = folderParam ? parseInt(folderParam) : null;
   const setCurrentFolderId = (folderId) => {
@@ -53,7 +70,22 @@ const FolderExplorer = () => {
   const [currentFolder, setCurrentFolder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
   const [viewMode, setViewMode] = useState('list'); // 'list' or 'grid'
+
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => setError(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(() => setSuccess(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [success]);
 
   // MOU Global Filter states
   const [filterCategory, setFilterCategory] = useState('');
@@ -77,12 +109,15 @@ const FolderExplorer = () => {
   // Action Dialogs
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
   const [folderName, setFolderName] = useState('');
+  const [actionLoadingMessage, setActionLoadingMessage] = useState('');
   
   const [fileDialogOpen, setFileDialogOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
 
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [renameName, setRenameName] = useState('');
+  const [folderStatus, setFolderStatus] = useState('Active');
+  const [renameStatus, setRenameStatus] = useState('Active');
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
@@ -90,7 +125,7 @@ const FolderExplorer = () => {
   const [accessList, setAccessList] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
   const [selectedUserForAccess, setSelectedUserForAccess] = useState(null);
-  const [accessGrantState, setAccessGrantState] = useState(true);
+  const [accessPermissionLevel, setAccessPermissionLevel] = useState('view');
   const [linkCopied, setLinkCopied] = useState(false);
 
   // File preview Modal
@@ -205,17 +240,22 @@ const FolderExplorer = () => {
     e.preventDefault();
     if (!folderName.trim()) return;
 
+    setActionLoadingMessage('Creating folder...');
     try {
       await api.post('/api/folders/', {
         name: folderName.trim(),
         parent_id: currentFolderId,
+        status: folderStatus,
         created_at: getFormattedSiteDateTime()
       });
       setFolderDialogOpen(false);
       setFolderName('');
+      setFolderStatus('Active');
       fetchContents();
     } catch (err) {
       setError(err.response?.data?.detail || "Failed to create folder.");
+    } finally {
+      setActionLoadingMessage('');
     }
   };
 
@@ -244,6 +284,9 @@ const FolderExplorer = () => {
   // Rename action
   const handleRenameClick = () => {
     setRenameName(activeItem.data.name);
+    if (activeItem.type === 'folder') {
+      setRenameStatus(activeItem.data.status || 'Active');
+    }
     setRenameDialogOpen(true);
     handleMenuClose();
   };
@@ -254,7 +297,10 @@ const FolderExplorer = () => {
 
     try {
       if (activeItem.type === 'folder') {
-        await api.put(`/api/folders/${activeItem.data.id}/`, { name: renameName.trim() });
+        await api.put(`/api/folders/${activeItem.data.id}/`, { 
+          name: renameName.trim(),
+          status: renameStatus
+        });
       } else {
         await api.put(`/api/files/${activeItem.data.id}/`, { name: renameName.trim() });
       }
@@ -272,6 +318,9 @@ const FolderExplorer = () => {
   };
 
   const handleDeleteSubmit = async () => {
+    const itemName = activeItem?.data?.name || "Item";
+    const itemType = activeItem?.type === 'folder' ? 'Folder' : 'File';
+    setActionLoadingMessage(`Deleting ${itemType.toLowerCase()}...`);
     try {
       if (activeItem.type === 'folder') {
         await api.delete(`/api/folders/${activeItem.data.id}/`);
@@ -279,9 +328,12 @@ const FolderExplorer = () => {
         await api.delete(`/api/files/${activeItem.data.id}/`);
       }
       setDeleteDialogOpen(false);
+      setSuccess(`${itemType} "${itemName}" deleted successfully.`);
       fetchContents();
     } catch (err) {
       setError(err.response?.data?.detail || "Delete failed.");
+    } finally {
+      setActionLoadingMessage('');
     }
   };
 
@@ -325,15 +377,39 @@ const FolderExplorer = () => {
     try {
       await api.post(`/api/folders/${activeItem.data.id}/assign-access/`, {
         user_id: selectedUserForAccess.id,
-        is_granted: accessGrantState
+        is_granted: true,
+        can_read: true,
+        can_download: true,
+        can_upload: accessPermissionLevel === 'edit',
+        can_delete_own_uploads: accessPermissionLevel === 'edit'
       });
       
       // Reload access list
       const res = await api.get(`/api/folders/${activeItem.data.id}/permissions/`);
       setAccessList(res.data);
       setSelectedUserForAccess(null);
+      setAccessPermissionLevel('view');
     } catch (err) {
       console.error("Failed to grant folder access:", err);
+    }
+  };
+
+  const handlePermissionChange = async (targetUserId, newLevel) => {
+    if (!activeItem?.data?.id) return;
+    try {
+      await api.post(`/api/folders/${activeItem.data.id}/assign-access/`, {
+        user_id: targetUserId,
+        is_granted: true,
+        can_read: true,
+        can_download: true,
+        can_upload: newLevel === 'edit',
+        can_delete_own_uploads: newLevel === 'edit'
+      });
+      // Reload access list
+      const res = await api.get(`/api/folders/${activeItem.data.id}/permissions/`);
+      setAccessList(res.data);
+    } catch (err) {
+      console.error("Failed to update folder access:", err);
     }
   };
 
@@ -601,7 +677,8 @@ const FolderExplorer = () => {
         </Box>
       )}
 
-      {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
+      {error && <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>{error}</Alert>}
+      {success && <Alert severity="success" sx={{ mb: 3 }} onClose={() => setSuccess(null)}>{success}</Alert>}
 
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress /></Box>
@@ -668,9 +745,32 @@ const FolderExplorer = () => {
               {/* Folder list section */}
               {folderData.subfolders.length > 0 && (
                 <Box sx={{ mb: 4 }}>
-                  <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 700, mb: 2, letterSpacing: '0.5px' }}>
-                    FOLDERS ({folderData.subfolders.length})
-                  </Typography>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5, flexWrap: 'wrap', gap: 2 }}>
+                    <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 700, letterSpacing: '0.5px' }}>
+                      FOLDERS ({folderData.subfolders.length})
+                    </Typography>
+                    
+                    {/* Status Legend Key */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        Folder Status Key:
+                      </Typography>
+                      {[
+                        { label: 'Active', color: '#8B5CF6' },
+                        { label: 'Signed', color: '#10B981' },
+                        { label: 'Pending Review', color: '#F59E0B' },
+                        { label: 'Expired', color: '#EF4444' },
+                        { label: 'Archived', color: '#475569' }
+                      ].map((item) => (
+                        <Box key={item.label} sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+                          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: item.color }} />
+                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, fontSize: '0.72rem' }}>
+                            {item.label}
+                          </Typography>
+                        </Box>
+                      ))}
+                    </Box>
+                  </Box>
 
                   {viewMode === 'grid' ? (
                     <Grid container spacing={2.5}>
@@ -692,12 +792,12 @@ const FolderExplorer = () => {
                                 position: 'relative',
                                 border: '1px solid',
                                 borderColor: 'divider',
-                                borderLeft: `4px solid ${deptStyle.color}`,
+                                borderLeft: `4px solid ${getFolderStatusColor(folder.status)}`,
                                 bgcolor: 'background.paper',
                                 transition: 'all 0.22s ease',
                                 '&:hover': { 
-                                  borderColor: deptStyle.color, 
-                                  bgcolor: deptStyle.bg,
+                                  borderColor: getFolderStatusColor(folder.status), 
+                                  bgcolor: `${getFolderStatusColor(folder.status)}08`,
                                 }
                               }}
                               onDoubleClick={() => handleFolderClick(folder.id)}
@@ -712,7 +812,24 @@ const FolderExplorer = () => {
                               </IconButton>
 
                               <CardContent sx={{ p: 2.5, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', height: '100%', '&:last-child': { pb: 2.5 } }}>
-                                <FolderIcon sx={{ color: deptStyle.color, fontSize: 56, mb: 1, filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.12))' }} />
+                                <FolderIcon sx={{ color: getFolderStatusColor(folder.status), fontSize: 56, mb: 1, filter: `drop-shadow(0 4px 10px ${getFolderStatusColor(folder.status)}30)` }} />
+                                
+                                <Chip 
+                                  label={folder.status || 'Active'} 
+                                  size="small" 
+                                  sx={{ 
+                                    fontSize: '0.65rem', 
+                                    height: 18, 
+                                    mb: 1.2, 
+                                    fontWeight: 700, 
+                                    color: getFolderStatusColor(folder.status), 
+                                    bgcolor: `${getFolderStatusColor(folder.status)}12`, 
+                                    border: '1px solid',
+                                    borderColor: `${getFolderStatusColor(folder.status)}24`,
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.5px'
+                                  }} 
+                                />
                                 
                                 <Typography variant="subtitle2" sx={{ fontWeight: 800, fontSize: '0.9rem', mb: 0.5, px: 0.5 }} noWrap>
                                   {folder.name}
@@ -736,6 +853,7 @@ const FolderExplorer = () => {
                             <TableCell sx={{ fontWeight: 700, py: 1.5 }}>Folder Name</TableCell>
                             <TableCell sx={{ fontWeight: 700 }}>Creator / Owner</TableCell>
                             <TableCell sx={{ fontWeight: 700 }}>Last Modified</TableCell>
+                            <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
                             <TableCell sx={{ fontWeight: 700 }}>Contents / Details</TableCell>
                             <TableCell align="right" sx={{ fontWeight: 700, pr: 2 }}>Actions</TableCell>
                           </TableRow>
@@ -749,11 +867,28 @@ const FolderExplorer = () => {
                               style={{ cursor: 'pointer' }}
                             >
                               <TableCell sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 1.5 }}>
-                                <FolderIcon sx={{ color: '#facc15', fontSize: 24 }} />
+                                <FolderIcon sx={{ color: getFolderStatusColor(folder.status), fontSize: 24 }} />
                                 <Typography variant="body2" sx={{ fontWeight: 600 }}>{folder.name}</Typography>
                               </TableCell>
                               <TableCell>{folder.created_by?.name || 'System'}</TableCell>
                               <TableCell>{new Date(folder.updated_at).toLocaleDateString()}</TableCell>
+                              <TableCell>
+                                <Chip 
+                                  label={folder.status || 'Active'} 
+                                  size="small" 
+                                  sx={{ 
+                                    fontSize: '0.7rem', 
+                                    height: 20, 
+                                    fontWeight: 700, 
+                                    color: getFolderStatusColor(folder.status), 
+                                    bgcolor: `${getFolderStatusColor(folder.status)}12`, 
+                                    border: '1px solid',
+                                    borderColor: `${getFolderStatusColor(folder.status)}24`,
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.5px'
+                                  }} 
+                                />
+                              </TableCell>
                               <TableCell>
                                 <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
                                   {folder.file_count} files • {folder.subfolder_count} folders
@@ -995,6 +1130,22 @@ const FolderExplorer = () => {
               onChange={(e) => setFolderName(e.target.value)}
               required
             />
+            <FormControl fullWidth margin="dense" sx={{ mt: 2 }}>
+              <InputLabel id="folder-status-select-label">Folder Status</InputLabel>
+              <Select
+                labelId="folder-status-select-label"
+                id="folder-status-select"
+                value={folderStatus}
+                label="Folder Status"
+                onChange={(e) => setFolderStatus(e.target.value)}
+              >
+                <MenuItem value="Active">🟣 Active</MenuItem>
+                <MenuItem value="Signed">🟢 Signed</MenuItem>
+                <MenuItem value="Pending Review">🟡 Pending Review</MenuItem>
+                <MenuItem value="Expired">🔴 Expired</MenuItem>
+                <MenuItem value="Archived">⚫ Archived</MenuItem>
+              </Select>
+            </FormControl>
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setFolderDialogOpen(false)}>Cancel</Button>
@@ -1045,6 +1196,24 @@ const FolderExplorer = () => {
               onChange={(e) => setRenameName(e.target.value)}
               required
             />
+            {activeItem?.type === 'folder' && (
+              <FormControl fullWidth margin="dense" sx={{ mt: 2 }}>
+                <InputLabel id="rename-folder-status-select-label">Folder Status</InputLabel>
+                <Select
+                  labelId="rename-folder-status-select-label"
+                  id="rename-folder-status-select"
+                  value={renameStatus}
+                  label="Folder Status"
+                  onChange={(e) => setRenameStatus(e.target.value)}
+                >
+                  <MenuItem value="Active">🟣 Active</MenuItem>
+                  <MenuItem value="Signed">🟢 Signed</MenuItem>
+                  <MenuItem value="Pending Review">🟡 Pending Review</MenuItem>
+                  <MenuItem value="Expired">🔴 Expired</MenuItem>
+                  <MenuItem value="Archived">⚫ Archived</MenuItem>
+                </Select>
+              </FormControl>
+            )}
           </DialogContent>
           <DialogActions>
             <Button onClick={() => { setRenameDialogOpen(false); setActiveItem(null); }}>Cancel</Button>
@@ -1067,6 +1236,38 @@ const FolderExplorer = () => {
         </DialogActions>
       </Dialog>
 
+      {/* Folder Action Loading Popup Dialog */}
+      <Dialog
+        open={Boolean(actionLoadingMessage)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: { borderRadius: '24px', p: 3, textAlign: 'center', boxShadow: '0 24px 80px rgba(0,0,0,0.18)' }
+        }}
+      >
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', p: 1 }}>
+          <Box sx={{ width: '100%', mb: 2.5, display: 'flex', justifyContent: 'center', alignItems: 'center', borderRadius: '16px', overflow: 'hidden' }}>
+            <video
+              src="/loading_image.mp4"
+              autoPlay
+              loop
+              muted
+              playsInline
+              style={{ width: '80%', borderRadius: '16px', maxHeight: '130px', objectFit: 'contain' }}
+            />
+          </Box>
+          <Typography variant="h5" sx={{ fontWeight: 800, mb: 1.5, color: 'primary.main' }}>
+            {actionLoadingMessage}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3, px: 2, lineHeight: 1.6 }}>
+            Please wait while the system updates your folders...
+          </Typography>
+          <Box sx={{ width: '100%', mt: 2, display: 'flex', justifyContent: 'center' }}>
+            <CircularProgress size={24} />
+          </Box>
+        </DialogContent>
+      </Dialog>
+
       {/* Folder Share Settings (Access settings) */}
       <Dialog open={accessDialogOpen} onClose={() => { setAccessDialogOpen(false); setActiveItem(null); }} maxWidth="sm" fullWidth>
         <DialogTitle>Share Settings: {activeItem?.data?.name}</DialogTitle>
@@ -1083,15 +1284,17 @@ const FolderExplorer = () => {
                 renderInput={(params) => <TextField {...params} label="Select User" size="small" />}
                 sx={{ flexGrow: 1 }}
               />
-              <FormControlLabel
-                control={
-                  <Switch 
-                    checked={accessGrantState} 
-                    onChange={(e) => setAccessGrantState(e.target.checked)} 
-                  />
-                }
-                label={accessGrantState ? "Grant" : "Revoke"}
-              />
+              <FormControl size="small" sx={{ minWidth: 120 }}>
+                <InputLabel>Permission</InputLabel>
+                <Select
+                  value={accessPermissionLevel}
+                  label="Permission"
+                  onChange={(e) => setAccessPermissionLevel(e.target.value)}
+                >
+                  <MenuItem value="view">Can view</MenuItem>
+                  <MenuItem value="edit">Can edit</MenuItem>
+                </Select>
+              </FormControl>
               <Button type="submit" variant="contained" disabled={!selectedUserForAccess}>Apply</Button>
             </Box>
           </form>
@@ -1157,11 +1360,15 @@ const FolderExplorer = () => {
                     <TableCell>{rule.user.name}</TableCell>
                     <TableCell>{rule.user.email}</TableCell>
                     <TableCell align="right">
-                      <Chip 
-                        label={rule.is_granted ? "Allowed" : "Blocked"} 
-                        color={rule.is_granted ? "success" : "error"} 
-                        size="small" 
-                      />
+                      <Select
+                        value={rule.can_upload ? 'edit' : 'view'}
+                        size="small"
+                        onChange={(e) => handlePermissionChange(rule.user.id, e.target.value)}
+                        sx={{ minWidth: 120, height: 32, fontSize: '0.85rem' }}
+                      >
+                        <MenuItem value="view">Can view</MenuItem>
+                        <MenuItem value="edit">Can edit</MenuItem>
+                      </Select>
                     </TableCell>
                     <TableCell align="right">
                       <IconButton 
