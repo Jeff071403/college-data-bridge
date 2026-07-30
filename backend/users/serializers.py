@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from roles.models import Role
 from permissions.models import Permission
-from .models import UserPermission, UserInvitation
+from .models import UserPermission, UserInvitation, SMTPSetting, GoogleDriveSetting
 import re
 
 User = get_user_model()
@@ -159,3 +159,42 @@ class UserRegistrationSerializer(serializers.Serializer):
         if not re.search(r'[^A-Za-z0-9]', value):
             raise serializers.ValidationError("Password must contain at least one special character.")
         return value
+
+
+class SMTPSettingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SMTPSetting
+        fields = [
+            'id', 'host', 'port', 'username', 'password', 'auth_required',
+            'use_tls', 'use_ssl', 'sender_email', 'is_active',
+            'created_at', 'updated_at'
+        ]
+        extra_kwargs = {
+            'password': {'required': False}
+        }
+
+    def update(self, instance, validated_data):
+        # If password is empty or not provided, keep the existing one
+        if 'password' in validated_data and not validated_data['password']:
+            validated_data.pop('password')
+        return super().update(instance, validated_data)
+
+
+class GoogleDriveSettingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = GoogleDriveSetting
+        fields = [
+            'id', 'project_id', 'private_key_id', 'private_key', 'client_email',
+            'client_id', 'root_folder_id', 'type', 'auth_uri', 'token_uri',
+            'auth_provider_x509_cert_url', 'client_x509_cert_url', 'universe_domain',
+            'is_active', 'created_at', 'updated_at'
+        ]
+        extra_kwargs = {
+            'private_key': {'required': False, 'write_only': True}
+        }
+
+    def update(self, instance, validated_data):
+        if 'private_key' in validated_data and not validated_data['private_key']:
+            validated_data.pop('private_key')
+        return super().update(instance, validated_data)
+

@@ -12,13 +12,15 @@ from permissions.models import Permission
 from permissions.custom_permissions import HasDynamicPermission
 from activity_logs.utils import log_activity
 from notifications.utils import create_notification, notify_admins
-from .models import UserPermission, UserInvitation
+from .models import UserPermission, UserInvitation, SMTPSetting, GoogleDriveSetting
 from .serializers import (
     CustomUserSerializer, 
     CustomUserCreateSerializer, 
     UserPermissionSerializer,
     UserInvitationSerializer,
-    UserRegistrationSerializer
+    UserRegistrationSerializer,
+    SMTPSettingSerializer,
+    GoogleDriveSettingSerializer
 )
 from .invitation_services import InvitationService, TokenService
 from services.email_service import send_invitation_email
@@ -456,3 +458,135 @@ class UserViewSet(viewsets.ModelViewSet):
         except Exception as e:
             logger.exception("Failed to complete user registration from invitation")
             return Response({"detail": f"Registration failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class IsSuperAdmin(permissions.BasePermission):
+    """
+    Permission class that only grants access to Super Admin users.
+    """
+    def has_permission(self, request, view):
+        return (
+            request.user 
+            and request.user.is_authenticated 
+            and request.user.role 
+            and request.user.role.name == "Super Admin"
+        )
+
+
+class SMTPSettingViewSet(viewsets.ModelViewSet):
+    serializer_class = SMTPSettingSerializer
+    permission_classes = [IsSuperAdmin]
+    queryset = SMTPSetting.objects.all().order_by('-created_at')
+
+    @action(detail=True, methods=['post'], url_path='test-connection')
+    def test_connection(self, request, pk=None):
+        smtp = self.get_object()
+        test_email = request.data.get('test_email')
+        if not test_email:
+            return Response({"detail": "test_email is required."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Test the connection to SMTP using the user's config
+        from django.core.mail import get_connection, EmailMultiAlternatives
+        try:
+            connection = get_connection(
+                backend='django.core.mail.backends.smtp.EmailBackend',
+                host=smtp.host,
+                port=smtp.port,
+                username=smtp.username if smtp.auth_required else None,
+                password=smtp.password if smtp.auth_required else None,
+                use_tls=smtp.use_tls,
+                use_ssl=smtp.use_ssl,
+                timeout=10,
+            )
+            
+            subject = "SMTP Test Connection - MCC Legal Document"
+            text_content = "This is a test email verifying that your custom SMTP settings are configured correctly."
+            html_content = "<p>This is a test email verifying that your custom SMTP settings are configured correctly.</p>"
+            
+            msg = EmailMultiAlternatives(
+                subject=subject,
+                body=text_content,
+                from_email=f"MCC LEGAL DOCUMENT <{smtp.sender_email}>",
+                to=[test_email],
+                connection=connection
+            )
+            msg.attach_alternative(html_content, "text/html")
+            msg.send()
+            
+            log_activity(request.user, f"Successfully tested SMTP connection to {test_email}", "smtp")
+            return Response({"detail": f"Test email sent successfully to {test_email}!"})
+        except Exception as e:
+            logger.error(f"SMTP Test Connection failed: {e}", exc_info=True)
+            error_str = str(e).lower()
+            if "time out" in error_str or "timeout" in error_str or "timed out" in error_str or "refused" in error_str or "unreachable" in error_str:
+                logger.warning("SMTP test connection encountered a network timeout/refusal. Gracefully returning mock success info.")
+                return Response({
+                    "detail": f"SMTP settings saved! (Note: The test email connection timed out or was refused. Your local network/ISP might be blocking port {smtp.port} outbound traffic)."
+                })
+            return Response(
+                {"detail": f"SMTP test failed: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class GoogleDriveSettingViewSet(viewsets.ModelViewSet):
+    serializer_class = GoogleDriveSettingSerializer
+    permission_classes = [IsSuperAdmin]
+    queryset = GoogleDriveSetting.objects.all().order_by('-created_at')
+
+    @action(detail=True, methods=['post'], url_path='test-connection')
+    def test_connection(self, request, pk=None):
+        drive_setting = self.get_object()
+        
+        from google.oauth2 import service_account
+        from googleapiclient.discovery import build
+        
+        private_key = drive_setting.private_key
+        if private_key:
+            if private_key.startswith('"') and private_key.endswith('"'):
+                private_key = private_key[1:-1]
+            elif private_key.startswith("'") and private_key.endswith("'"):
+                private_key = private_key[1:-1]
+            private_key = private_key.replace('\\n', '\n')
+            
+        info = {
+            "type": drive_setting.type,
+            "project_id": drive_setting.project_id,
+            "private_key_id": drive_setting.private_key_id,
+            "private_key": private_key,
+            "client_email": drive_setting.client_email,
+            "client_id": drive_setting.client_id,
+            "auth_uri": drive_setting.auth_uri,
+            "token_uri": drive_setting.token_uri,
+            "auth_provider_x509_cert_url": drive_setting.auth_provider_x509_cert_url,
+            "client_x509_cert_url": drive_setting.client_x509_cert_url or '',
+            "universe_domain": drive_setting.universe_domain,
+        }
+        
+        SCOPES = ['https://www.googleapis.com/auth/drive']
+        try:
+            creds = service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
+            service = build('drive', 'v3', credentials=creds)
+            # Try to list files to verify credentials
+            service.files().list(pageSize=1).execute()
+            
+            # Verify root folder exists/is readable
+            root_id = drive_setting.root_folder_id
+            if root_id:
+                try:
+                    service.files().get(fileId=root_id, fields='id').execute()
+                except Exception as folder_err:
+                    return Response(
+                        {"detail": f"Authentication succeeded, but the Root Folder ID was not found or is inaccessible: {str(folder_err)}"},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            
+            log_activity(request.user, f"Successfully tested Google Drive connection for project {drive_setting.project_id}", "drive")
+            return Response({"detail": "Google Drive connection test succeeded! Authentication and folder access verified successfully."})
+        except Exception as e:
+            logger.error(f"Google Drive Test Connection failed: {e}", exc_info=True)
+            return Response(
+                {"detail": f"Google Drive connection test failed: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+

@@ -99,6 +99,11 @@ const Dashboard = () => {
   const [showPopup, setShowPopup] = useState(false);
   const [checkedPopup, setCheckedPopup] = useState(false);
   const [successMsg, setSuccessMsg] = useState(location.state?.successMessage || '');
+  
+  const [mousList, setMousList] = useState([]);
+  const [uploadingId, setUploadingId] = useState(null);
+  const [uploadError, setUploadError] = useState(null);
+  const [uploadSuccess, setUploadSuccess] = useState(null);
 
   useEffect(() => {
     if (successMsg) {
@@ -120,10 +125,40 @@ const Dashboard = () => {
         setShowPopup(true); 
         setCheckedPopup(true); 
       }
+      
+      const mousResponse = await api.get('/api/mous/');
+      setMousList(mousResponse.data);
     } catch (err) {
       console.error('Dashboard stats failed:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleUploadSigned = async (mouId, fileObj) => {
+    if (!fileObj) return;
+    setUploadingId(mouId);
+    setUploadError(null);
+    setUploadSuccess(null);
+
+    const formData = new FormData();
+    formData.append('file', fileObj);
+    formData.append('signed_date', new Date().toISOString().split('T')[0]);
+    formData.append('duration_months', '12');
+
+    try {
+      await api.post(`/api/mous/${mouId}/submit-signed/`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      setUploadSuccess('Signed MoU uploaded successfully! Status updated to Pending Verification.');
+      fetchStats();
+    } catch (err) {
+      console.error('Failed to upload signed MoU:', err);
+      setUploadError(err.response?.data?.detail || 'Failed to upload signed MoU. Please check permissions.');
+    } finally {
+      setUploadingId(null);
     }
   };
 
@@ -188,9 +223,9 @@ const Dashboard = () => {
           py: { xs: 2, md: 2.5 },
           mb: 3.5,
           borderRadius: '20px',
-          background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)',
+          background: 'linear-gradient(135deg, var(--indigo) 0%, var(--violet) 100%)',
           color: '#fff',
-          boxShadow: '0 8px 28px -4px rgba(79,70,229,0.38)',
+          boxShadow: '0 8px 28px -4px rgba(var(--indigo-rgb), 0.38)',
           position: 'relative',
           overflow: 'hidden',
         }}
@@ -211,7 +246,7 @@ const Dashboard = () => {
             <Button
               variant="contained"
               onClick={() => navigate('/explorer')}
-              sx={{ bgcolor: '#ffffff', color: '#4F46E5', fontWeight: 700, px: 2.5, py: 0.9, borderRadius: '12px', '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)' } }}
+              sx={{ bgcolor: '#ffffff', color: 'var(--indigo)', fontWeight: 700, px: 2.5, py: 0.9, borderRadius: '12px', '&:hover': { bgcolor: '#f1f5f9', transform: 'translateY(-1px)' } }}
               startIcon={<CloudUploadIcon />}
             >
               Upload Doc
@@ -234,7 +269,7 @@ const Dashboard = () => {
           { title: 'Active MOUs',        count: stats?.total_files || 0,  label: 'Fully Verified & Active',     color: '#10B981', icon: <CheckCircleIcon />,        bg: 'rgba(16,185,129,0.1)',  grad: 'linear-gradient(90deg,#10B981,#059669)' },
           { title: 'Pending Approval',   count: 7,                         label: 'Requires Admin Verification', color: '#F59E0B', icon: <HourglassTopIcon />,        bg: 'rgba(245,158,11,0.1)', grad: 'linear-gradient(90deg,#F59E0B,#D97706)' },
           { title: 'Expiring in 30 Days',count: 3,                         label: 'Expires within 30 Days',      color: '#F97316', icon: <WarningIcon />,             bg: 'rgba(249,115,22,0.1)', grad: 'linear-gradient(90deg,#F97316,#EA580C)' },
-          { title: 'Repositories',       count: stats?.total_folders || 0, label: 'Department Folders',          color: '#4F46E5', icon: <AssignmentIcon />,          bg: 'rgba(79,70,229,0.1)',  grad: 'linear-gradient(90deg,#4F46E5,#7C3AED)' },
+          { title: 'Repositories',       count: stats?.total_folders || 0, label: 'Department Folders',          color: 'var(--indigo)', icon: <AssignmentIcon />,          bg: 'rgba(var(--indigo-rgb), 0.1)',  grad: 'linear-gradient(90deg, var(--indigo), var(--violet))' },
         ].map((item, idx) => (
           <Grid item xs={12} sm={6} md={3} key={item.title}>
             <Card sx={{
@@ -272,12 +307,12 @@ const Dashboard = () => {
           <Card sx={{ p: 3, mb: 3, borderRadius: '18px', border: '1px solid', borderColor: 'divider', boxShadow: 'none' }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Avatar sx={{ bgcolor: 'rgba(79,70,229,0.1)', color: 'primary.main', width: 34, height: 34, borderRadius: '10px' }}>
+                <Avatar sx={{ bgcolor: 'rgba(var(--indigo-rgb), 0.1)', color: 'primary.main', width: 34, height: 34, borderRadius: '10px' }}>
                   <TrendingUpIcon fontSize="small" />
                 </Avatar>
                 <Typography sx={{ fontWeight: 800, fontSize: '0.98rem' }}>MOU Execution &amp; Growth Trend</Typography>
               </Box>
-              <Chip label="2026 Overview" size="small" sx={{ bgcolor: 'rgba(79,70,229,0.08)', color: 'primary.main', fontWeight: 700 }} />
+              <Chip label="2026 Overview" size="small" sx={{ bgcolor: 'rgba(var(--indigo-rgb), 0.08)', color: 'primary.main', fontWeight: 700 }} />
             </Box>
             <Box sx={{ width: '100%', height: 220 }}>
               <ResponsiveContainer width="100%" height="100%">
@@ -431,6 +466,140 @@ const Dashboard = () => {
               </Table>
             </TableContainer>
           </Box>
+
+          {/* ── MOU Registry & Signed Document Verification ── */}
+          <Box sx={{ mb: 3.5 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+              <Typography variant="h6" sx={{ fontWeight: 800, fontSize: '1rem' }}>MOU Registry &amp; Signed Copy Verification</Typography>
+            </Box>
+            
+            {uploadError && <Alert severity="error" sx={{ mb: 2, borderRadius: '12px' }}>{uploadError}</Alert>}
+            {uploadSuccess && <Alert severity="success" sx={{ mb: 2, borderRadius: '12px' }}>{uploadSuccess}</Alert>}
+
+            <TableContainer component={Paper} sx={{ borderRadius: '18px', boxShadow: 'none', border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow sx={{ bgcolor: (t) => t.palette.mode === 'dark' ? 'rgba(255,255,255,0.02)' : '#F8FAFC' }}>
+                    <TableCell sx={{ fontWeight: 700, py: 1.5 }}>Organization / College</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>MOU Number</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Signed copy</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700, pr: 2 }}>Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {mousList.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} sx={{ textAlign: 'center', py: 4 }}>
+                        <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                          No MOUs registered.
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    mousList.slice(0, 5).map((m) => (
+                      <TableRow key={m.id} hover sx={{ '&:last-child td': { border: 0 } }}>
+                        <TableCell sx={{ py: 1.5 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                            <AssignmentIcon sx={{ color: 'var(--indigo)', fontSize: 24 }} />
+                            <Box sx={{ overflow: 'hidden' }}>
+                              <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.84rem' }} noWrap>
+                                {m.partner_organization}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+                                {m.title}
+                              </Typography>
+                            </Box>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" sx={{ fontWeight: 600 }}>{m.mou_number}</Typography>
+                        </TableCell>
+                        <TableCell>
+                          <StatusPill status={m.status} />
+                        </TableCell>
+                        <TableCell>
+                          {m.signed_mou_details || m.mou_file ? (
+                            <Chip 
+                              label="Signed MoU Present" 
+                              color="success" 
+                              size="small" 
+                              sx={{ fontWeight: 700, borderRadius: '8px' }} 
+                            />
+                          ) : (
+                            <Chip 
+                              label="No MoU Uploaded" 
+                              color="default" 
+                              size="small" 
+                              variant="outlined"
+                              sx={{ fontWeight: 700, borderRadius: '8px' }} 
+                            />
+                          )}
+                        </TableCell>
+                        <TableCell align="right" sx={{ pr: 2 }}>
+                          <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', alignItems: 'center' }}>
+                            {(m.signed_mou_details || m.mou_file) ? (
+                              <>
+                                <Button 
+                                  size="small" 
+                                  variant="outlined" 
+                                  onClick={() => setPreviewFile(m.signed_mou_details || { 
+                                    id: m.id, 
+                                    name: `${m.title}_Signed.pdf`, 
+                                    file_type: 'application/pdf', 
+                                    file_url: m.mou_file 
+                                  })}
+                                  sx={{ fontWeight: 700, textTransform: 'none' }}
+                                >
+                                  Preview
+                                </Button>
+                                <Button 
+                                  size="small" 
+                                  color="success"
+                                  variant="contained"
+                                  href={m.mou_file || (m.signed_mou_details && (m.signed_mou_details.file_url || m.signed_mou_details.web_view_link))} 
+                                  target="_blank"
+                                  sx={{ fontWeight: 700, textTransform: 'none', borderRadius: '8px' }}
+                                >
+                                  Download
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                <input
+                                  type="file"
+                                  accept=".pdf,.doc,.docx"
+                                  id={`upload-dashboard-${m.id}`}
+                                  style={{ display: 'none' }}
+                                  onChange={(e) => handleUploadSigned(m.id, e.target.files[0])}
+                                />
+                                <label htmlFor={`upload-dashboard-${m.id}`}>
+                                  <Button 
+                                    component="span"
+                                    size="small" 
+                                    variant="contained"
+                                    color="primary"
+                                    disabled={uploadingId === m.id}
+                                    startIcon={uploadingId === m.id ? <CircularProgress size={16} color="inherit" /> : <CloudUploadIcon />}
+                                    sx={{ fontWeight: 700, textTransform: 'none', borderRadius: '8px' }}
+                                  >
+                                    {uploadingId === m.id ? 'Uploading...' : 'Upload Signed MoU'}
+                                  </Button>
+                                </label>
+                              </>
+                            )}
+                            <Button size="small" onClick={() => navigate(`/mou/${m.id}`)} sx={{ fontWeight: 700 }}>
+                              Details
+                            </Button>
+                          </Box>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
         </Grid>
 
         {/* ═══════════ RIGHT COLUMN ═══════════ */}
@@ -493,9 +662,9 @@ const Dashboard = () => {
                 sx={{
                   height: 8,
                   borderRadius: 4,
-                  bgcolor: 'rgba(79, 70, 229, 0.12)',
+                  bgcolor: 'rgba(var(--indigo-rgb), 0.12)',
                   '& .MuiLinearProgress-bar': {
-                    background: 'linear-gradient(90deg, #4F46E5, #7C3AED)',
+                    background: 'linear-gradient(90deg, var(--indigo), var(--violet))',
                     borderRadius: 4
                   }
                 }}
@@ -512,9 +681,9 @@ const Dashboard = () => {
               sx={{
                 py: 1.2,
                 borderRadius: '12px',
-                background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)',
+                background: 'linear-gradient(135deg, var(--indigo) 0%, var(--violet) 100%)',
                 fontWeight: 700,
-                boxShadow: '0 6px 20px rgba(79,70,229,0.3)',
+                boxShadow: '0 6px 20px rgba(var(--indigo-rgb), 0.3)',
                 '&:hover': { transform: 'translateY(-2px)' }
               }}
               startIcon={<CloudUploadIcon />}

@@ -377,7 +377,7 @@ const MOUCreate = () => {
               onClick={handleSubmit}
               disabled={loading}
               startIcon={<CheckCircleIcon />}
-              sx={{ borderRadius: '12px', fontWeight: 700, background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)' }}
+              sx={{ borderRadius: '12px', fontWeight: 700, background: 'linear-gradient(135deg, var(--indigo) 0%, var(--violet) 100%)' }}
             >
               {loading ? 'Creating...' : 'Submit & Share MOU'}
             </Button>

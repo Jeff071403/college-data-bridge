@@ -1,9 +1,11 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
-from .views import UserViewSet, CustomTokenObtainPairView
+from .views import UserViewSet, CustomTokenObtainPairView, SMTPSettingViewSet, GoogleDriveSettingViewSet
 
 router = DefaultRouter()
+router.register(r'smtp-settings', SMTPSettingViewSet, basename='smtp-settings')
+router.register(r'google-drive-settings', GoogleDriveSettingViewSet, basename='google-drive-settings')
 router.register(r'', UserViewSet)
 
 urlpatterns = [

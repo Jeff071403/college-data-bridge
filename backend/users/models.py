@@ -98,3 +98,65 @@ class UserInvitation(models.Model):
 
     def __str__(self):
         return f"Invitation for {self.email} ({self.system_role.name})"
+
+
+class SMTPSetting(models.Model):
+    host = models.CharField(max_length=255)
+    port = models.IntegerField(default=587)
+    username = models.CharField(max_length=255, blank=True, null=True)
+    password = models.CharField(max_length=255, blank=True, null=True)
+    auth_required = models.BooleanField(default=True)
+    use_tls = models.BooleanField(default=True)
+    use_ssl = models.BooleanField(default=False)
+    sender_email = models.EmailField()
+    is_active = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        status = "Active" if self.is_active else "Inactive"
+        return f"{self.sender_email} ({status})"
+
+    def save(self, *args, **kwargs):
+        if self.is_active:
+            # Ensure only one is active at any time
+            SMTPSetting.objects.filter(is_active=True).exclude(pk=self.pk).update(is_active=False)
+        super().save(*args, **kwargs)
+
+
+class GoogleDriveSetting(models.Model):
+    project_id = models.CharField(max_length=255)
+    private_key_id = models.CharField(max_length=255)
+    private_key = models.TextField()
+    client_email = models.EmailField()
+    client_id = models.CharField(max_length=255)
+    root_folder_id = models.CharField(max_length=255)
+    
+    # Optional fields for customization
+    type = models.CharField(max_length=100, default='service_account')
+    auth_uri = models.URLField(default='https://accounts.google.com/o/oauth2/auth')
+    token_uri = models.URLField(default='https://oauth2.googleapis.com/token')
+    auth_provider_x509_cert_url = models.URLField(default='https://www.googleapis.com/oauth2/v1/certs')
+    client_x509_cert_url = models.URLField(max_length=500, blank=True, null=True)
+    universe_domain = models.CharField(max_length=100, default='googleapis.com')
+    
+    is_active = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        status = "Active" if self.is_active else "Inactive"
+        return f"Google Drive - {self.project_id} ({status})"
+
+    def save(self, *args, **kwargs):
+        if self.is_active:
+            # Ensure only one is active at any time
+            GoogleDriveSetting.objects.filter(is_active=True).exclude(pk=self.pk).update(is_active=False)
+        super().save(*args, **kwargs)
+

@@ -24,7 +24,7 @@ def sync_drive_directory(parent_google_id=None, parent_folder_obj=None, user=Non
     from files.models import File
     
     if not parent_google_id:
-        parent_google_id = getattr(settings, 'GOOGLE_DRIVE_ROOT_FOLDER_ID', None)
+        parent_google_id = drive_service.get_root_folder_id()
         
     if not parent_google_id:
         return
@@ -88,6 +88,7 @@ class FolderViewSet(viewsets.ModelViewSet):
         'assign_access': 'manage_users', # Only admins manage access rules
         'revoke_access': 'manage_users',
         'permissions': 'manage_users',
+        'audit': 'view_folder',
     }
 
     def get_queryset(self):
@@ -103,6 +104,14 @@ class FolderViewSet(viewsets.ModelViewSet):
         all_folders = Folder.objects.all()
         accessible_ids = [f.id for f in all_folders if f.has_access(user)]
         return Folder.objects.filter(id__in=accessible_ids).order_by('name')
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if request.user.is_authenticated and instance.created_by != request.user:
+            from .models import FolderView
+            FolderView.objects.get_or_create(user=request.user, folder=instance)
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
 
     def create(self, request, *args, **kwargs):
         # Validate parent access & nested folder permission
@@ -290,13 +299,19 @@ class FolderViewSet(viewsets.ModelViewSet):
             svc = drive_service.authenticate()
             # Try to get the root folder metadata as a live ping
             from django.conf import settings
-            root_id = settings.GOOGLE_DRIVE_ROOT_FOLDER_ID
+            root_id = drive_service.get_root_folder_id()
             meta = svc.files().get(fileId=root_id, fields='id,name').execute()
+            
+            # Check if using dynamic db configuration
+            from users.models import GoogleDriveSetting
+            active = GoogleDriveSetting.objects.filter(is_active=True).first()
+            sa_info = active.client_email if active else getattr(settings, 'GOOGLE_DRIVE_CLIENT_EMAIL', 'Default Env SA')
+            
             return Response({
                 'connected': True,
                 'root_folder_id': root_id,
                 'root_folder_name': meta.get('name'),
-                'service_account': settings.GOOGLE_SERVICE_ACCOUNT_FILE,
+                'service_account': sa_info,
             })
         except Exception as e:
             return Response({
@@ -484,6 +499,11 @@ class FolderViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
 
+        # Mark as viewed by the current user
+        if request.user.is_authenticated and folder.created_by != request.user:
+            from .models import FolderView
+            FolderView.objects.get_or_create(user=request.user, folder=folder)
+
         # Trigger sync from Google Drive
         if folder.google_folder_id:
             self.sync_drive_directory(folder.google_folder_id, folder, request.user)
@@ -511,8 +531,7 @@ class FolderViewSet(viewsets.ModelViewSet):
         Fetches live items from Google Drive root folder first.
         """
         # Trigger sync from Google Drive using Root ID
-        from django.conf import settings
-        root_id = getattr(settings, 'GOOGLE_DRIVE_ROOT_FOLDER_ID', None)
+        root_id = drive_service.get_root_folder_id()
         if root_id:
             self.sync_drive_directory(root_id, None, request.user)
 
@@ -529,6 +548,28 @@ class FolderViewSet(viewsets.ModelViewSet):
             "subfolders": subfolders_data,
             "files": []
         })
+
+    @action(detail=False, methods=['get'], url_path='shared')
+    def shared_folders(self, request):
+        """
+        Returns folders explicitly shared with the current user.
+        """
+        user = request.user
+        if not user or not user.is_authenticated:
+            return Response([])
+            
+        from folders.models import FolderPermission
+        from mous.models import MOUShare
+        from django.db.models import Q
+        
+        fp_folder_ids = FolderPermission.objects.filter(user=user, is_granted=True).values_list('folder_id', flat=True)
+        mou_shares = MOUShare.objects.filter(Q(user=user) | Q(department__name=user.department) if user.department else Q(user=user))
+        mou_folder_ids = mou_shares.values_list('mou__department_id', flat=True)
+        
+        shared_ids = set(list(fp_folder_ids) + list(mou_folder_ids))
+        shared_folders = Folder.objects.filter(id__in=shared_ids).exclude(created_by=user).order_by('name')
+        
+        return Response(FolderSerializer(shared_folders, many=True).data)
 
     @action(detail=True, methods=['get'])
     def permissions(self, request, pk=None):
@@ -614,4 +655,68 @@ class FolderViewSet(viewsets.ModelViewSet):
         return Response({
             "detail": f"Access {action_type} successfully.",
             "permission": FolderPermissionSerializer(folder_perm).data
+        })
+
+    @action(detail=True, methods=['get'])
+    def audit(self, request, pk=None):
+        folder = self.get_object()
+        
+        def collect_directory_data(current_folder):
+            subfolders = []
+            files = []
+            
+            # Subfolders
+            for sub in current_folder.children.all().order_by('name'):
+                subfolders.append({
+                    'id': sub.id,
+                    'name': sub.name,
+                    'created_by': sub.created_by.name if sub.created_by else 'System Admin',
+                    'created_at': sub.created_at,
+                    'updated_at': sub.updated_at,
+                    'expiry_date': sub.expiry_date,
+                    'status': sub.status,
+                    'summary': sub.summary,
+                    'path': [{"id": ancestor.id, "name": ancestor.name} for ancestor in sub.get_ancestors()]
+                })
+                # Recurse
+                nested_subs, nested_files = collect_directory_data(sub)
+                subfolders.extend(nested_subs)
+                files.extend(nested_files)
+                
+            # Files in current folder
+            for f in current_folder.files.all().order_by('-updated_at'):
+                files.append({
+                    'id': f.id,
+                    'name': f.name,
+                    'folder_name': current_folder.name,
+                    'folder_id': current_folder.id,
+                    'uploaded_by': f.uploaded_by.name if f.uploaded_by else 'System Admin',
+                    'created_at': f.created_at,
+                    'updated_at': f.updated_at,
+                    'size': f.size,
+                    'version_number': f.version_number
+                })
+                
+            return subfolders, files
+
+        if not folder.has_access(request.user):
+            return Response({"detail": "You do not have access to this folder."}, status=status.HTTP_403_FORBIDDEN)
+            
+        subfolders, files = collect_directory_data(folder)
+        
+        folder_info = {
+            'id': folder.id,
+            'name': folder.name,
+            'created_by': folder.created_by.name if folder.created_by else 'System Admin',
+            'created_at': folder.created_at,
+            'updated_at': folder.updated_at,
+            'status': folder.status,
+            'summary': folder.summary,
+            'expiry_date': folder.expiry_date
+        }
+        
+        return Response({
+            'folder': folder_info,
+            'subfolders': subfolders,
+            'files': files
         })

@@ -11,7 +11,39 @@ import os
 logger = logging.getLogger(__name__)
 
 def get_service_account_info():
-    """Builds service account credentials dictionary directly from environment variables."""
+    """Builds service account credentials dictionary.
+    First checks if there is an active GoogleDriveSetting in the database.
+    Falls back to environment variables / settings."""
+    try:
+        from users.models import GoogleDriveSetting
+        active_setting = GoogleDriveSetting.objects.filter(is_active=True).first()
+        if active_setting:
+            private_key = active_setting.private_key
+            if private_key:
+                if private_key.startswith('"') and private_key.endswith('"'):
+                    private_key = private_key[1:-1]
+                elif private_key.startswith("'") and private_key.endswith("'"):
+                    private_key = private_key[1:-1]
+                private_key = private_key.replace('\\n', '\n')
+            
+            return {
+                "type": active_setting.type,
+                "project_id": active_setting.project_id,
+                "private_key_id": active_setting.private_key_id,
+                "private_key": private_key,
+                "client_email": active_setting.client_email,
+                "client_id": active_setting.client_id,
+                "auth_uri": active_setting.auth_uri,
+                "token_uri": active_setting.token_uri,
+                "auth_provider_x509_cert_url": active_setting.auth_provider_x509_cert_url,
+                "client_x509_cert_url": active_setting.client_x509_cert_url or '',
+                "universe_domain": active_setting.universe_domain,
+                "root_folder_id": active_setting.root_folder_id
+            }
+    except Exception as e:
+        logger.error(f"Error reading GoogleDriveSetting from database: {e}")
+
+    # Fallback to env/settings:
     private_key = getattr(settings, 'GOOGLE_DRIVE_PRIVATE_KEY', '') or os.environ.get('GOOGLE_DRIVE_PRIVATE_KEY', '')
     if private_key:
         if private_key.startswith('"') and private_key.endswith('"'):
@@ -31,8 +63,15 @@ def get_service_account_info():
         "token_uri": getattr(settings, 'GOOGLE_DRIVE_TOKEN_URI', 'https://oauth2.googleapis.com/token'),
         "auth_provider_x509_cert_url": getattr(settings, 'GOOGLE_DRIVE_AUTH_PROVIDER_CERT_URL', 'https://www.googleapis.com/oauth2/v1/certs'),
         "client_x509_cert_url": getattr(settings, 'GOOGLE_DRIVE_CLIENT_CERT_URL', ''),
-        "universe_domain": getattr(settings, 'GOOGLE_DRIVE_UNIVERSE_DOMAIN', 'googleapis.com')
+        "universe_domain": getattr(settings, 'GOOGLE_DRIVE_UNIVERSE_DOMAIN', 'googleapis.com'),
+        "root_folder_id": getattr(settings, 'GOOGLE_DRIVE_ROOT_FOLDER_ID', '')
     }
+
+
+def get_root_folder_id():
+    """Gets the active Google Drive root folder ID."""
+    info = get_service_account_info()
+    return info.get('root_folder_id') or getattr(settings, 'GOOGLE_DRIVE_ROOT_FOLDER_ID', None)
 
 def authenticate():
     """
@@ -77,7 +116,7 @@ def create_folder(name, parent_id=None):
     """
     target_parent = parent_id
     if not target_parent:
-        target_parent = getattr(settings, 'GOOGLE_DRIVE_ROOT_FOLDER_ID', None)
+        target_parent = get_root_folder_id()
     try:
         service = authenticate()
         file_metadata = {
@@ -126,7 +165,7 @@ def upload_file(file_content, filename, mime_type, parent_id=None):
     """
     target_parent = parent_id
     if not target_parent:
-        target_parent = getattr(settings, 'GOOGLE_DRIVE_ROOT_FOLDER_ID', None)
+        target_parent = get_root_folder_id()
     try:
         service = authenticate()
         file_metadata = {
@@ -202,8 +241,8 @@ def upload_file(file_content, filename, mime_type, parent_id=None):
             'name': filename,
             'mimeType': mime_type or 'application/octet-stream',
             'size': file_size,
-            'webViewLink': f"https://drive.google.com/drive/folders/{parent_id or settings.GOOGLE_DRIVE_ROOT_FOLDER_ID}",
-            'webContentLink': f"https://drive.google.com/drive/folders/{parent_id or settings.GOOGLE_DRIVE_ROOT_FOLDER_ID}"
+            'webViewLink': f"https://drive.google.com/drive/folders/{parent_id or get_root_folder_id()}",
+            'webContentLink': f"https://drive.google.com/drive/folders/{parent_id or get_root_folder_id()}"
         }
     except Exception as e:
         logger.warning(f"Google Drive upload fallback triggered for '{filename}': {e}")
@@ -220,8 +259,8 @@ def upload_file(file_content, filename, mime_type, parent_id=None):
             'name': filename,
             'mimeType': mime_type or 'application/octet-stream',
             'size': file_size,
-            'webViewLink': f"https://drive.google.com/drive/folders/{parent_id or settings.GOOGLE_DRIVE_ROOT_FOLDER_ID}",
-            'webContentLink': f"https://drive.google.com/drive/folders/{parent_id or settings.GOOGLE_DRIVE_ROOT_FOLDER_ID}"
+            'webViewLink': f"https://drive.google.com/drive/folders/{parent_id or get_root_folder_id()}",
+            'webContentLink': f"https://drive.google.com/drive/folders/{parent_id or get_root_folder_id()}"
         }
 
 def download_file(file_id):

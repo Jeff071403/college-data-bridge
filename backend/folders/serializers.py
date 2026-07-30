@@ -37,13 +37,15 @@ class FolderSerializer(serializers.ModelSerializer):
     subfolder_count = serializers.SerializerMethodField()
     file_count = serializers.SerializerMethodField()
     path = serializers.SerializerMethodField()
+    is_viewed = serializers.SerializerMethodField()
 
     class Meta:
         model = Folder
         fields = [
             'id', 'name', 'parent_id', 'created_by', 
             'created_at', 'updated_at', 'subfolder_count', 
-            'file_count', 'path', 'google_folder_id', 'status'
+            'file_count', 'path', 'google_folder_id', 'status',
+            'summary', 'expiry_date', 'is_viewed'
         ]
         read_only_fields = ['created_by', 'created_at', 'updated_at']
 
@@ -63,3 +65,12 @@ class FolderSerializer(serializers.ModelSerializer):
         path = [{"id": f.id, "name": f.name} for f in ancestors]
         path.append({"id": obj.id, "name": obj.name})
         return path
+
+    def get_is_viewed(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user or not request.user.is_authenticated:
+            return True
+        if obj.created_by == request.user:
+            return True
+        from .models import FolderView
+        return FolderView.objects.filter(user=request.user, folder=obj).exists()

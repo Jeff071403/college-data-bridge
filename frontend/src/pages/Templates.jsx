@@ -231,7 +231,7 @@ const Templates = () => {
       {/* ── Stats Row ────────────────────────────────────── */}
       <Grid container spacing={2.5} sx={{ mb: 3.5 }}>
         {[
-          { label: 'Collections', value: stats.total_templates, icon: <FolderIcon />, color: '#4F46E5', bg: 'rgba(79,70,229,0.08)' },
+          { label: 'Collections', value: stats.total_templates, icon: <FolderIcon />, color: 'var(--indigo)', bg: 'rgba(var(--indigo-rgb), 0.08)' },
           { label: 'PDF Files', value: stats.total_pdfs, icon: <DescriptionIcon />, color: '#10B981', bg: 'rgba(16,185,129,0.08)' },
           { label: 'Categories', value: stats.total_categories, icon: <FolderCopyIcon />, color: '#EC4899', bg: 'rgba(236,72,153,0.08)' },
           { label: 'Storage (MB)', value: stats.storage_usage_mb, icon: <StorageIcon />, color: '#0EA5E9', bg: 'rgba(14,165,233,0.08)' },
@@ -381,7 +381,7 @@ const Templates = () => {
                             p: 2.5, borderRadius: '16px', border: '1px solid', borderColor: 'divider',
                             cursor: 'pointer', height: '100%', display: 'flex', flexDirection: 'column', gap: 1.5,
                             transition: 'all 0.22s ease', boxShadow: 'none',
-                            '&:hover': { borderColor: 'primary.main', boxShadow: '0 6px 24px rgba(79,70,229,0.1)', transform: 'translateY(-2px)' }
+                            '&:hover': { borderColor: 'primary.main', boxShadow: '0 6px 24px rgba(var(--indigo-rgb), 0.1)', transform: 'translateY(-2px)' }
                           }}
                         >
                           <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
@@ -424,7 +424,7 @@ const Templates = () => {
                       p: 3, borderRadius: '18px', border: '1px solid', borderColor: 'divider',
                       cursor: 'pointer', height: '100%', display: 'flex', flexDirection: 'column', gap: 1.5,
                       transition: 'all 0.22s ease', boxShadow: 'none',
-                      '&:hover': { borderColor: 'primary.main', boxShadow: '0 8px 28px rgba(79,70,229,0.1)', transform: 'translateY(-3px)' }
+                      '&:hover': { borderColor: 'primary.main', boxShadow: '0 8px 28px rgba(var(--indigo-rgb), 0.1)', transform: 'translateY(-3px)' }
                     }}
                   >
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>

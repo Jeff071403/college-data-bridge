@@ -215,13 +215,13 @@ const MOUDetail = () => {
       <Card sx={{ p: 3.5, mb: 3.5, borderRadius: '24px', border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 2 }}>
           <Box sx={{ display: 'flex', gap: 2.5, alignItems: 'flex-start' }}>
-            <Avatar sx={{ bgcolor: 'rgba(79, 70, 229, 0.12)', color: 'primary.main', width: 64, height: 64, borderRadius: '18px' }}>
+            <Avatar sx={{ bgcolor: 'rgba(var(--indigo-rgb), 0.12)', color: 'primary.main', width: 64, height: 64, borderRadius: '18px' }}>
               <FolderIcon sx={{ fontSize: 38 }} />
             </Avatar>
 
             <Box>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1, flexWrap: 'wrap' }}>
-                <Chip label={mou.mou_number} sx={{ fontWeight: 800, bgcolor: 'rgba(79,70,229,0.1)', color: 'primary.main', borderRadius: '8px' }} />
+                <Chip label={mou.mou_number} sx={{ fontWeight: 800, bgcolor: 'rgba(var(--indigo-rgb), 0.1)', color: 'primary.main', borderRadius: '8px' }} />
                 <StatusPill status={mou.status} size="medium" />
                 {daysLeft !== null && (
                   <Chip
@@ -259,7 +259,7 @@ const MOUDetail = () => {
                   variant="contained"
                   startIcon={<ShareIcon />}
                   onClick={() => setShareDialogOpen(true)}
-                  sx={{ borderRadius: '12px', fontWeight: 700, background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)' }}
+                  sx={{ borderRadius: '12px', fontWeight: 700, background: 'linear-gradient(135deg, var(--indigo) 0%, var(--violet) 100%)' }}
                 >
                   Share Folder
                 </Button>
@@ -458,7 +458,7 @@ const MOUDetail = () => {
               <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>{mou.duration_months} Months</Typography>
             </Box>
 
-            <Box sx={{ p: 2, borderRadius: '12px', bgcolor: 'rgba(79,70,229,0.06)', border: '1px solid rgba(79,70,229,0.18)' }}>
+            <Box sx={{ p: 2, borderRadius: '12px', bgcolor: 'rgba(var(--indigo-rgb), 0.06)', border: '1px solid rgba(var(--indigo-rgb), 0.18)' }}>
               <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>Expiry Date</Typography>
               <Typography variant="h6" sx={{ fontWeight: 900, color: 'primary.main' }}>{mou.expiry_date || 'N/A'}</Typography>
             </Box>

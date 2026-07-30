@@ -38,6 +38,7 @@ class MOU(models.Model):
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_mous')
     original_mou = models.ForeignKey(File, on_delete=models.SET_NULL, null=True, blank=True, related_name='original_mous')
     signed_mou = models.ForeignKey(File, on_delete=models.SET_NULL, null=True, blank=True, related_name='signed_mous')
+    mou_file = models.FileField(upload_to='uploads/mous/', null=True, blank=True)
 
     effective_date = models.DateField(null=True, blank=True)
     signed_date = models.DateField(null=True, blank=True)

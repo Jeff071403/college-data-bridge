@@ -72,6 +72,7 @@ const Layout = ({ children }) => {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showLoginPopup, setShowLoginPopup] = useState(false);
 
   // Command Palette states
   const [cmdOpen, setCmdOpen] = useState(false);
@@ -86,6 +87,12 @@ const Layout = ({ children }) => {
       setNotifications(res.data);
       const unread = res.data.filter(n => !n.is_read).length;
       setUnreadCount(unread);
+      
+      // Display welcome notification pop up once per session if unread notifications exist
+      if (unread > 0 && !sessionStorage.getItem('login_notified')) {
+        setShowLoginPopup(true);
+        sessionStorage.setItem('login_notified', 'true');
+      }
     } catch (err) {
       console.error("Failed to load notifications:", err);
     }
@@ -151,6 +158,7 @@ const Layout = ({ children }) => {
   };
 
   const handleLogout = () => {
+    sessionStorage.removeItem('login_notified');
     logout();
     navigate('/login');
   };
@@ -181,7 +189,7 @@ const Layout = ({ children }) => {
   };
 
   const menuItems = [
-    { text: 'Dashboard',       icon: <DashboardIcon />,          path: '/',           permission: 'view_dashboard', iconColor: '#4F46E5' },
+    { text: 'Dashboard',       icon: <DashboardIcon />,          path: '/',           permission: 'view_dashboard', iconColor: 'var(--indigo)' },
     { text: 'Shared With Me',  icon: <ShareIcon />,              path: '/shared',     permission: 'view_dashboard', iconColor: '#3B82F6' },
     { text: 'Departments',     icon: <BusinessIcon />,           path: '/departments', permission: 'view_dashboard', iconColor: '#14B8A6' },
     { text: 'Notifications',   icon: <NotificationsIcon />,      path: '/notifications', permission: 'view_notifications', iconColor: '#F43F5E' },
@@ -228,7 +236,7 @@ const Layout = ({ children }) => {
         transition: 'justify-content 0.28s ease',
         overflow: 'hidden',
       }}>
-        <Avatar sx={{ background: 'linear-gradient(135deg, #4F46E5, #7C3AED)', width: 36, height: 36, flexShrink: 0, boxShadow: '0 2px 8px rgba(79,70,229,0.35)' }}>
+        <Avatar sx={{ background: 'linear-gradient(135deg, var(--indigo), var(--violet))', width: 36, height: 36, flexShrink: 0, boxShadow: '0 2px 8px rgba(var(--indigo-rgb), 0.35)' }}>
           <CloudQueueIcon sx={{ color: '#ffffff', fontSize: '1.15rem' }} />
         </Avatar>
         <Box sx={{
@@ -244,7 +252,7 @@ const Layout = ({ children }) => {
             fontWeight: 800,
             fontSize: '0.95rem',
             letterSpacing: '0.5px',
-            background: 'linear-gradient(135deg, #4F46E5, #7C3AED)',
+            background: 'linear-gradient(135deg, var(--indigo), var(--violet))',
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
             lineHeight: 1.2,
@@ -317,7 +325,7 @@ const Layout = ({ children }) => {
           width: 34, height: 34,
           border: '2px solid',
           borderColor: 'primary.light',
-          background: 'linear-gradient(135deg, #4F46E5, #7C3AED)',
+          background: 'linear-gradient(135deg, var(--indigo), var(--violet))',
           fontSize: '0.85rem',
           fontWeight: 700,
           flexShrink: 0,
@@ -363,8 +371,8 @@ const Layout = ({ children }) => {
                     overflow: 'hidden',
                     transition: 'all 0.22s cubic-bezier(0.22,1,0.36,1)',
                     ...(isSelected ? {
-                      background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)',
-                      boxShadow: '0 4px 12px rgba(79,70,229,0.3)',
+                      background: 'linear-gradient(135deg, var(--indigo) 0%, var(--violet) 100%)',
+                      boxShadow: '0 4px 12px rgba(var(--indigo-rgb), 0.3)',
                       '&:hover': { opacity: 0.92 },
                     } : {
                       '&:hover': { bgcolor: 'action.hover' },
@@ -375,7 +383,7 @@ const Layout = ({ children }) => {
                     width: 32, height: 32,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     borderRadius: '8px',
-                    bgcolor: isSelected ? 'rgba(255,255,255,0.18)' : `${item.iconColor}18`,
+                    bgcolor: isSelected ? 'rgba(255,255,255,0.18)' : (item.iconColor.startsWith('var(') ? 'rgba(var(--indigo-rgb), 0.08)' : `${item.iconColor}18`),
                     color: isSelected ? '#ffffff' : item.iconColor,
                     flexShrink: 0,
                     transition: 'background-color 0.2s ease',
@@ -672,7 +680,7 @@ const Layout = ({ children }) => {
             {/* User Profile dropdown avatar */}
             <Tooltip title={user?.name || "Account Profile"}>
               <IconButton onClick={handleProfileOpen} sx={{ p: 0.2, ml: 0.5, border: '2px solid', borderColor: 'primary.main', transition: 'transform 0.2s ease', '&:hover': { transform: 'scale(1.08)' } }}>
-                <Avatar sx={{ background: 'linear-gradient(135deg, #4F46E5, #7C3AED)', width: 32, height: 32, fontSize: '0.85rem', fontWeight: 700 }}>
+                <Avatar sx={{ background: 'linear-gradient(135deg, var(--indigo), var(--violet))', width: 32, height: 32, fontSize: '0.85rem', fontWeight: 700 }}>
                   {user?.name?.charAt(0).toUpperCase()}
                 </Avatar>
               </IconButton>
@@ -1188,6 +1196,117 @@ const Layout = ({ children }) => {
             Press <kbd style={{ border: '1px solid', borderColor: 'divider', px: 0.75, py: 0.1, borderRadius: '4px', background: '#ffffff', color: '#0f172a', fontSize: '0.62rem', fontWeight: 700 }}>Esc</kbd> to close
           </Typography>
         </Box>
+      </Dialog>
+
+      {/* Login Notifications PopUp */}
+      <Dialog
+        open={showLoginPopup}
+        onClose={() => setShowLoginPopup(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: '24px',
+            p: 1.5,
+            border: '1px solid',
+            borderColor: 'divider',
+            background: 'background.paper',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.15)'
+          }
+        }}
+      >
+        <DialogContent sx={{ p: 2.5 }}>
+          <Box sx={{ textAlign: 'center', mb: 3 }}>
+            <Box 
+              sx={{ 
+                width: 80, 
+                height: 80, 
+                mx: 'auto', 
+                mb: 2, 
+                borderRadius: '20px', 
+                overflow: 'hidden', 
+                boxShadow: '0 8px 24px rgba(var(--indigo-rgb), 0.25)',
+                bgcolor: 'background.paper',
+                border: '1px solid',
+                borderColor: 'divider'
+              }}
+            >
+              <video 
+                src="/bell notification.mp4" 
+                autoPlay 
+                muted 
+                loop 
+                playsInline
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+              />
+            </Box>
+            <Typography variant="h5" sx={{ fontWeight: 800, mb: 1, letterSpacing: '-0.5px' }}>
+              Welcome Back!
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              You have <strong>{unreadCount}</strong> unread {unreadCount === 1 ? 'notification' : 'notifications'} since your last visit.
+            </Typography>
+          </Box>
+
+          <List sx={{ p: 0, mb: 3.5, maxHeight: 240, overflowY: 'auto' }}>
+            {notifications.filter(n => !n.is_read).slice(0, 3).map((n, i) => (
+              <React.Fragment key={n.id}>
+                {i > 0 && <Divider sx={{ my: 1.5 }} />}
+                <ListItem sx={{ p: 0, alignItems: 'flex-start' }}>
+                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'var(--indigo)', mt: 0.8, mr: 1.5, flexShrink: 0 }} />
+                  <ListItemText
+                    primary={n.title}
+                    secondary={n.description}
+                    primaryTypographyProps={{ fontSize: '0.88rem', fontWeight: 700, color: 'text.primary', mb: 0.2 }}
+                    secondaryTypographyProps={{ fontSize: '0.78rem', color: 'text.secondary', lineHeight: 1.4 }}
+                  />
+                </ListItem>
+              </React.Fragment>
+            ))}
+          </List>
+
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2 }}>
+            <Button
+              variant="contained"
+              fullWidth
+              onClick={() => {
+                setShowLoginPopup(false);
+                navigate('/notifications');
+              }}
+              sx={{ 
+                borderRadius: '12px', 
+                fontWeight: 700, 
+                py: 1.2, 
+                textTransform: 'none',
+                background: 'linear-gradient(135deg, var(--indigo), var(--violet))'
+              }}
+            >
+              Go to Notifications
+            </Button>
+            
+            <Box sx={{ display: 'flex', gap: 1.5 }}>
+              <Button
+                variant="outlined"
+                fullWidth
+                onClick={async () => {
+                  await handleMarkAllRead();
+                  setShowLoginPopup(false);
+                }}
+                sx={{ borderRadius: '12px', fontWeight: 700, py: 1, textTransform: 'none', borderColor: 'divider', color: 'text.primary' }}
+              >
+                Mark All Read
+              </Button>
+              <Button
+                variant="text"
+                fullWidth
+                onClick={() => setShowLoginPopup(false)}
+                sx={{ borderRadius: '12px', fontWeight: 700, py: 1, textTransform: 'none', color: 'text.secondary' }}
+              >
+                Dismiss
+              </Button>
+            </Box>
+          </Box>
+        </DialogContent>
       </Dialog>
       
     </Box>

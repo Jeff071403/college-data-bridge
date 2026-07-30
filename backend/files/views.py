@@ -33,7 +33,6 @@ class FileViewSet(viewsets.ModelViewSet):
     action_permissions = {
         'list': 'view_folder',
         'retrieve': 'view_folder',
-        'create': 'upload_files',
         'update': 'replace_files',  # Using replace_files for renaming
         'partial_update': 'replace_files',
         'destroy': 'delete_files',
@@ -68,7 +67,7 @@ class FileViewSet(viewsets.ModelViewSet):
             # Find or create a designated "General" root folder (parent=None)
             folder = Folder.objects.filter(name="General", parent=None).first()
             if not folder:
-                drive_root_id = getattr(settings, 'GOOGLE_DRIVE_ROOT_FOLDER_ID', None)
+                drive_root_id = drive_service.get_root_folder_id()
                 google_id = None
                 try:
                     if drive_root_id:
@@ -119,6 +118,9 @@ class FileViewSet(viewsets.ModelViewSet):
         if not file_type:
             file_type = "application/octet-stream"
 
+        is_signed_copy = request.data.get('is_signed') == 'true'
+        summary_text = request.data.get('summary', '')
+
         try:
             if hasattr(uploaded_file, 'seek'):
                 try:
@@ -133,6 +135,7 @@ class FileViewSet(viewsets.ModelViewSet):
                     file_type=file_type,
                     folder=folder,
                     uploaded_by=request.user,
+                    is_signed=is_signed_copy,
                     file_field=uploaded_file
                 )
 
@@ -170,9 +173,24 @@ class FileViewSet(viewsets.ModelViewSet):
                         File.objects.filter(pk=file_instance.pk).update(created_at=parsed_dt)
                         file_instance.refresh_from_db()
 
+                # Handle signed copy folder update and notifications
+                if is_signed_copy:
+                    folder.status = 'Signed'
+                    if summary_text:
+                        folder.summary = summary_text
+                    folder.save(update_fields=['status', 'summary'])
+
                 # Log & Notify
                 log_activity(request.user, f"Uploaded file '{name}' to folder '{folder.name}'", "files", request)
-                notify_admins("File Uploaded", f"File '{name}' was uploaded to '{folder.name}' by {request.user.name}.", metadata={'action': 'file_uploaded', 'file_id': file_instance.id, 'file_name': file_instance.name, 'folder_id': folder.id, 'folder_name': folder.name})
+                
+                if is_signed_copy:
+                    notify_admins(
+                        "Signed Copy Uploaded",
+                        f"User {request.user.name} uploaded a signed copy to folder '{folder.name}'. Summary: {summary_text}",
+                        metadata={'action': 'folder_signed_upload', 'folder_id': folder.id, 'summary': summary_text}
+                    )
+                else:
+                    notify_admins("File Uploaded", f"File '{name}' was uploaded to '{folder.name}' by {request.user.name}.", metadata={'action': 'file_uploaded', 'file_id': file_instance.id, 'file_name': file_instance.name, 'folder_id': folder.id, 'folder_name': folder.name})
         except Exception as e:
             logger.exception(f"File upload view failed for '{name}' in folder '{folder.name}': {e}")
             return Response({"detail": f"Google Drive file upload failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -273,7 +291,16 @@ class FileViewSet(viewsets.ModelViewSet):
                             logger.warning(f"Failed to delete file version '{version.google_file_id}' on Google Drive: {version_err}")
 
                 # Delete local database record
+                folder = file_instance.folder
                 file_instance.delete()
+
+                # Revert folder status back to Active if folder is Signed but no signed files remain
+                if folder.status == 'Signed':
+                    remaining_signed_exists = File.objects.filter(folder=folder, is_signed=True).exists()
+                    if not remaining_signed_exists:
+                        folder.status = 'Active'
+                        folder.save(update_fields=['status'])
+                        logger.info(f"Folder '{folder.name}' status reverted back to Active as no signed files remain in it.")
 
                 # Audit logging
                 log_activity(request.user, f"Deleted file '{name}' from folder '{folder_name}'", "files", request)

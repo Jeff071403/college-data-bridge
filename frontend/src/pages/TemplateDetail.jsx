@@ -409,7 +409,7 @@ const TemplateDetail = () => {
                 sx={{
                   border: '2px dashed',
                   borderColor: isDragActive ? 'primary.main' : 'divider',
-                  bgcolor: isDragActive ? 'rgba(79,70,229,0.04)' : 'action.hover',
+                  bgcolor: isDragActive ? 'rgba(var(--indigo-rgb), 0.04)' : 'action.hover',
                   borderRadius: '16px',
                   p: 4.5,
                   textAlign: 'center',
@@ -417,7 +417,7 @@ const TemplateDetail = () => {
                   transition: 'all 0.2s',
                   '&:hover': {
                     borderColor: 'primary.main',
-                    bgcolor: 'rgba(79,70,229,0.02)'
+                    bgcolor: 'rgba(var(--indigo-rgb), 0.02)'
                   }
                 }}
                 onClick={() => document.getElementById('template-file-input').click()}

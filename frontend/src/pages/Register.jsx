@@ -231,14 +231,14 @@ const Register = () => {
             flexDirection: 'column',
             justifyContent: 'center',
             alignItems: 'center',
-            background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)',
+            background: 'linear-gradient(135deg, var(--indigo) 0%, var(--violet) 100%)',
             color: '#ffffff',
             p: 6,
             position: 'relative',
             overflow: 'hidden'
           }}
         >
-          <Box sx={{ position: 'absolute', width: 400, height: 400, borderRadius: '50%', background: 'radial-gradient(circle, rgba(124,58,237,0.5) 0%, rgba(79,70,229,0) 70%)', filter: 'blur(60px)', top: '-5%', left: '10%' }} />
+          <Box sx={{ position: 'absolute', width: 400, height: 400, borderRadius: '50%', background: 'radial-gradient(circle, rgba(var(--violet-rgb), 0.5) 0%, rgba(var(--indigo-rgb), 0) 70%)', filter: 'blur(60px)', top: '-5%', left: '10%' }} />
           <Box sx={{ position: 'absolute', width: 350, height: 350, borderRadius: '50%', background: 'radial-gradient(circle, rgba(16,185,129,0.3) 0%, rgba(16,185,129,0) 70%)', filter: 'blur(60px)', bottom: '5%', right: '10%' }} />
 
           <Box sx={{ maxWidth: 460, textAlign: 'center', zIndex: 1 }}>
@@ -382,39 +382,35 @@ const Register = () => {
 
               {/* Dynamic Stream and Department selectors (if not pre-defined in invitation) */}
               {!invitation?.stream && (
-                <Grid container spacing={2}>
-                  <Grid item xs={12} sm={6}>
-                    <FormControl fullWidth>
-                      <InputLabel>Stream</InputLabel>
-                      <Select
-                        value={stream}
-                        label="Stream"
-                        onChange={handleStreamChange}
-                        sx={{ borderRadius: '10px' }}
-                      >
-                        {deptCategories.map(c => (
-                          <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  </Grid>
+                <>
+                  <FormControl fullWidth>
+                    <InputLabel>Stream</InputLabel>
+                    <Select
+                      value={stream}
+                      label="Stream"
+                      onChange={handleStreamChange}
+                      sx={{ borderRadius: '10px' }}
+                    >
+                      {deptCategories.map(c => (
+                        <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
 
-                  <Grid item xs={12} sm={6}>
-                    <FormControl fullWidth disabled={!stream}>
-                      <InputLabel>Department</InputLabel>
-                      <Select
-                        value={department}
-                        label="Department"
-                        onChange={e => setDepartment(e.target.value)}
-                        sx={{ borderRadius: '10px' }}
-                      >
-                        {filteredDepts.map(d => (
-                          <MenuItem key={d.id} value={d.name}>{d.name}</MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  </Grid>
-                </Grid>
+                  <FormControl fullWidth disabled={!stream}>
+                    <InputLabel>Department</InputLabel>
+                    <Select
+                      value={department}
+                      label="Department"
+                      onChange={e => setDepartment(e.target.value)}
+                      sx={{ borderRadius: '10px' }}
+                    >
+                      {filteredDepts.map(d => (
+                        <MenuItem key={d.id} value={d.name}>{d.name}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </>
               )}
 
               {/* Password */}

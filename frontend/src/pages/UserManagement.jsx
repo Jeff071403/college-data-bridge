@@ -32,13 +32,13 @@ const FIELD_SX = {
     fontSize: '14px',
     '& fieldset': { borderColor: 'rgba(0,0,0,0.23)', borderWidth: '1.5px', transition: 'border-color 0.18s' },
     '&:hover fieldset': { borderColor: '#111827' },
-    '&.Mui-focused fieldset': { borderColor: '#7C3AED', borderWidth: '2px' },
-    '&.Mui-focused': { boxShadow: '0 0 0 3px rgba(124,58,237,0.12)' },
+    '&.Mui-focused fieldset': { borderColor: 'var(--violet)', borderWidth: '2px' },
+    '&.Mui-focused': { boxShadow: '0 0 0 3px rgba(var(--violet-rgb), 0.12)' },
   },
   '& .MuiInputLabel-root': {
     fontFamily: 'Inter, system-ui, sans-serif',
     fontSize: '14px',
-    '&.Mui-focused': { color: '#7C3AED' },
+    '&.Mui-focused': { color: 'var(--violet)' },
   },
   '& .MuiFormHelperText-root': { fontFamily: 'Inter, system-ui, sans-serif', fontSize: '12px' },
 };
@@ -50,14 +50,14 @@ const SELECT_SX = {
   fontSize: '14px',
   '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(0,0,0,0.23)', borderWidth: '1.5px' },
   '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#111827' },
-  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#7C3AED', borderWidth: '2px' },
-  '&.Mui-focused': { boxShadow: '0 0 0 3px rgba(124,58,237,0.12)' },
+  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: 'var(--violet)', borderWidth: '2px' },
+  '&.Mui-focused': { boxShadow: '0 0 0 3px rgba(var(--violet-rgb), 0.12)' },
 };
 
 const LABEL_SX = {
   fontFamily: 'Inter, system-ui, sans-serif',
   fontSize: '14px',
-  '&.Mui-focused': { color: '#7C3AED' },
+  '&.Mui-focused': { color: 'var(--violet)' },
 };
 
 const MENU_ITEM_SX = { fontFamily: 'Inter, system-ui, sans-serif', fontSize: '14px' };
@@ -184,16 +184,16 @@ const DepartmentSelect = ({ value, onChange, options, disabled, label = 'Departm
           justifyContent: 'space-between',
           px: '14px',
           border: '1.5px solid',
-          borderColor: showError ? '#d32f2f' : open ? '#7C3AED' : disabled ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.23)',
+          borderColor: showError ? '#d32f2f' : open ? 'var(--violet)' : disabled ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.23)',
           borderRadius: '12px',
           backgroundColor: disabled ? 'rgba(0,0,0,0.04)' : '#fff',
           cursor: disabled ? 'not-allowed' : 'pointer',
           outline: 'none',
           transition: 'border-color 0.18s ease, box-shadow 0.18s ease',
-          boxShadow: open ? '0 0 0 3px rgba(124,58,237,0.12)' : 'none',
+          boxShadow: open ? '0 0 0 3px rgba(var(--violet-rgb), 0.12)' : 'none',
           userSelect: 'none',
-          '&:hover': { borderColor: showError ? '#d32f2f' : open ? '#7C3AED' : disabled ? 'rgba(0,0,0,0.12)' : '#111827' },
-          '&:focus-visible': { outline: 'none', borderColor: '#7C3AED', boxShadow: '0 0 0 3px rgba(124,58,237,0.12)' },
+          '&:hover': { borderColor: showError ? '#d32f2f' : open ? 'var(--violet)' : disabled ? 'rgba(0,0,0,0.12)' : '#111827' },
+          '&:focus-visible': { outline: 'none', borderColor: 'var(--violet)', boxShadow: '0 0 0 3px rgba(var(--violet-rgb), 0.12)' },
         }}
       >
         {/* Floating label */}
@@ -207,7 +207,7 @@ const DepartmentSelect = ({ value, onChange, options, disabled, label = 'Departm
             transform: (open || hasValue) ? 'none' : 'translateY(-50%)',
             fontSize: (open || hasValue) ? '11.5px' : '14px',
             fontWeight: (open || hasValue) ? 500 : 400,
-            color: showError ? '#d32f2f' : (open || hasValue) ? '#7C3AED' : disabled ? 'rgba(0,0,0,0.38)' : 'rgba(0,0,0,0.6)',
+            color: showError ? '#d32f2f' : (open || hasValue) ? 'var(--violet)' : disabled ? 'rgba(0,0,0,0.38)' : 'rgba(0,0,0,0.6)',
             bgcolor: disabled ? 'transparent' : '#fff',
             px: (open || hasValue) ? '4px' : 0,
             lineHeight: 1,
@@ -843,7 +843,7 @@ const UserManagement = () => {
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <SecurityIcon sx={{ color: 'primary.main', fontSize: '1.1rem' }} />
                 <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Role &amp; Permission Guide</Typography>
-                <Chip label="Click to expand" size="small" sx={{ fontSize: '0.68rem', height: 20, bgcolor: 'rgba(79,70,229,0.1)', color: 'primary.main' }} />
+                <Chip label="Click to expand" size="small" sx={{ fontSize: '0.68rem', height: 20, bgcolor: 'rgba(var(--indigo-rgb), 0.1)', color: 'primary.main' }} />
               </Box>
               <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.72rem' }}>What each role can and cannot do</Typography>
             </Box>
@@ -853,7 +853,7 @@ const UserManagement = () => {
                   <thead>
                     <tr style={{ borderBottom: '2px solid #E2E8F0', textAlign: 'left' }}>
                       <th style={{ padding: '8px 12px', fontWeight: 700 }}>Permission Name</th>
-                      {user?.role?.name !== 'Admin' && <th style={{ padding: '8px 12px', textAlign: 'center', color: '#7C3AED' }}>Super Admin</th>}
+                      {user?.role?.name !== 'Admin' && <th style={{ padding: '8px 12px', textAlign: 'center', color: 'var(--violet)' }}>Super Admin</th>}
                       <th style={{ padding: '8px 12px', textAlign: 'center', color: '#2563EB' }}>Admin</th>
                       <th style={{ padding: '8px 12px', textAlign: 'center', color: '#059669' }}>User</th>
                       <th style={{ padding: '8px 12px', textAlign: 'center', color: '#D97706' }}>View Only</th>
@@ -1331,7 +1331,7 @@ const UserManagement = () => {
           )}
 
           {inviteSubmitting && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 3, p: 2.5, bgcolor: 'rgba(79,70,229,0.06)', border: '1px solid', borderColor: 'rgba(79,70,229,0.18)', borderRadius: '14px' }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 3, p: 2.5, bgcolor: 'rgba(var(--indigo-rgb), 0.06)', border: '1px solid', borderColor: 'rgba(var(--indigo-rgb), 0.18)', borderRadius: '14px' }}>
               <dotlottie-player
                 src="/loading.lottie"
                 background="transparent"
@@ -1366,7 +1366,7 @@ const UserManagement = () => {
             />
 
             {generatedLink && (
-              <Box sx={{ mt: 3, p: 2, bgcolor: 'rgba(79,70,229,0.05)', borderRadius: '10px', border: '1px dashed', borderColor: 'primary.light' }}>
+              <Box sx={{ mt: 3, p: 2, bgcolor: 'rgba(var(--indigo-rgb), 0.05)', borderRadius: '10px', border: '1px dashed', borderColor: 'primary.light' }}>
                 <Typography variant="caption" sx={{ fontWeight: 700, color: 'primary.main', display: 'block', mb: 1, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
                   Invitation Link Generated
                 </Typography>
@@ -1702,11 +1702,12 @@ const UserManagement = () => {
               sx={{
                 borderRadius: '10px', fontWeight: 700, px: 4,
                 fontFamily: 'Inter, system-ui, sans-serif',
-                background: 'linear-gradient(135deg, #4F46E5, #7C3AED)',
-                boxShadow: '0 4px 14px rgba(124,58,237,0.35)',
+                background: 'linear-gradient(135deg, var(--indigo), var(--violet))',
+                boxShadow: '0 4px 14px rgba(var(--violet-rgb), 0.35)',
                 '&:hover': {
-                  background: 'linear-gradient(135deg, #4338CA, #6D28D9)',
-                  boxShadow: '0 6px 20px rgba(124,58,237,0.5)',
+                  background: 'linear-gradient(135deg, var(--indigo), var(--violet))',
+                  filter: 'brightness(90%)',
+                  boxShadow: '0 6px 20px rgba(var(--violet-rgb), 0.5)',
                   transform: 'translateY(-1px)',
                 },
                 transition: 'all 0.18s ease',

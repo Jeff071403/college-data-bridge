@@ -31,6 +31,8 @@ class Folder(models.Model):
         ],
         default='Active'
     )
+    summary = models.TextField(blank=True, null=True)
+    expiry_date = models.DateField(blank=True, null=True)
 
     def __str__(self):
         return self.name
@@ -153,3 +155,24 @@ class FolderPermission(models.Model):
     def __str__(self):
         status = "Granted" if self.is_granted else "Revoked"
         return f"{self.user.email} - {self.folder.name} ({status})"
+
+
+class FolderView(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='folder_views'
+    )
+    folder = models.ForeignKey(
+        Folder,
+        on_delete=models.CASCADE,
+        related_name='views'
+    )
+    viewed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'folder')
+
+    def __str__(self):
+        return f"{self.user.email} viewed {self.folder.name}"
+

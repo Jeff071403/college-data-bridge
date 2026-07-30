@@ -21,7 +21,7 @@ const STATUS_MAP = {
   expiring:  { label: 'Expiring',   icon: <WarningAmberIcon/>, cls: 'status-expiring', color: '#EA580C', bg: 'rgba(249,115,22,0.10)' },
   expired:   { label: 'Expired',    icon: <CancelIcon />,      cls: 'status-expired',  color: '#BE123C', bg: 'rgba(244,63,94,0.10)'  },
   draft:     { label: 'Draft',      icon: <EditNoteIcon />,    cls: 'status-draft',    color: '#64748B', bg: 'rgba(148,163,184,0.12)' },
-  renewed:   { label: 'Renewed',    icon: <AutorenewIcon />,   cls: 'status-renewed',  color: '#4338CA', bg: 'rgba(79,70,229,0.10)'  },
+  renewed:   { label: 'Renewed',    icon: <AutorenewIcon />,   cls: 'status-renewed',  color: 'var(--indigo)', bg: 'rgba(var(--indigo-rgb), 0.10)'  },
   suspended: { label: 'Suspended',  icon: <PauseCircleIcon/>,  cls: 'status-draft',    color: '#64748B', bg: 'rgba(148,163,184,0.12)' },
 };
 

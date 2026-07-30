@@ -20,6 +20,19 @@ export const ThemeModeProvider = ({ children }) => {
   useEffect(() => { localStorage.setItem('theme_mode', mode); }, [mode]);
   const toggleTheme = () => setMode(p => p === 'light' ? 'dark' : 'light');
 
+  useEffect(() => {
+    const hexToRgb = (hex) => {
+      let c = hex.replace('#', '');
+      if (c.length === 3) c = c.split('').map(x => x + x).join('');
+      const num = parseInt(c, 16);
+      return `${(num >> 16) & 0xff}, ${(num >> 8) & 0xff}, ${num & 0xff}`;
+    };
+    document.documentElement.style.setProperty('--indigo', primaryColor);
+    document.documentElement.style.setProperty('--violet', secondaryColor);
+    document.documentElement.style.setProperty('--indigo-rgb', hexToRgb(primaryColor));
+    document.documentElement.style.setProperty('--violet-rgb', hexToRgb(secondaryColor));
+  }, [primaryColor, secondaryColor]);
+
   // Called from Settings page to apply new appearance
   const applyAppearance = useCallback(({ primary, secondary, font, radius }) => {
     if (primary) { setPrimaryColor(primary); localStorage.setItem('app_primary_color', primary); }

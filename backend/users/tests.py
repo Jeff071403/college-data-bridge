@@ -315,3 +315,92 @@ class DocumentManagementSystemTests(TestCase):
         results = response.data.get('results') if isinstance(response.data, dict) else response.data
         invite_emails = [i['email'] for i in results]
         self.assertNotIn("some_super_invite@test.edu", invite_emails)
+
+    def test_super_admin_can_manage_smtp_settings(self):
+        token = self.get_jwt_token("superadmin@test.edu", "password123")
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + token)
+
+        # 1. Create SMTPSetting
+        response = self.client.post('/api/users/smtp-settings/', {
+            'host': 'smtp.test.com',
+            'port': 587,
+            'username': 'testuser',
+            'password': 'testpassword',
+            'use_tls': True,
+            'use_ssl': False,
+            'sender_email': 'test@test.com',
+            'is_active': True
+        })
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        smtp_id = response.data['id']
+
+        # 2. List SMTP settings
+        response = self.client.get('/api/users/smtp-settings/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+
+        # 3. Update SMTP setting
+        response = self.client.put(f'/api/users/smtp-settings/{smtp_id}/', {
+            'host': 'smtp.updated.com',
+            'port': 465,
+            'username': 'updateduser',
+            'use_tls': False,
+            'use_ssl': True,
+            'sender_email': 'updated@test.com',
+            'is_active': True
+        })
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['host'], 'smtp.updated.com')
+
+        # 4. Delete SMTP setting
+        response = self.client.delete(f'/api/users/smtp-settings/{smtp_id}/')
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_admin_cannot_manage_smtp_settings(self):
+        token = self.get_jwt_token("admin@test.edu", "password123")
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + token)
+
+        # Try to post
+        response = self.client.post('/api/users/smtp-settings/', {
+            'host': 'smtp.test.com',
+            'port': 587,
+            'username': 'testuser',
+            'password': 'testpassword',
+            'sender_email': 'test@test.com'
+        })
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_user_cannot_manage_smtp_settings(self):
+        token = self.get_jwt_token("user@test.edu", "password123")
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + token)
+
+        # Try to get
+        response = self.client.get('/api/users/smtp-settings/')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_smtp_settings_deactivates_others(self):
+        from users.models import SMTPSetting
+        
+        # Create two SMTP settings in DB
+        s1 = SMTPSetting.objects.create(
+            host='smtp1.com', username='u1', password='p1', sender_email='s1@test.com', is_active=True
+        )
+        s2 = SMTPSetting.objects.create(
+            host='smtp2.com', username='u2', password='p2', sender_email='s2@test.com', is_active=False
+        )
+
+        # Activate the second via API as Super Admin
+        token = self.get_jwt_token("superadmin@test.edu", "password123")
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + token)
+
+        response = self.client.patch(f'/api/users/smtp-settings/{s2.id}/', {
+            'is_active': True
+        })
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Verify s1 is now deactivated
+        s1.refresh_from_db()
+        s2.refresh_from_db()
+        self.assertFalse(s1.is_active)
+        self.assertTrue(s2.is_active)
+

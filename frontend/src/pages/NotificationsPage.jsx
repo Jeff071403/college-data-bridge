@@ -119,7 +119,7 @@ const NotificationsPage = () => {
                   <ListItem
                     sx={{
                       p: 2.5,
-                      bgcolor: n.is_read ? 'transparent' : 'rgba(79,70,229,0.04)',
+                      bgcolor: n.is_read ? 'transparent' : 'rgba(var(--indigo-rgb), 0.04)',
                       transition: 'background-color 0.2s ease',
                       '&:hover': { bgcolor: 'action.hover' }
                     }}
@@ -133,8 +133,8 @@ const NotificationsPage = () => {
                   >
                     <ListItemIcon sx={{ minWidth: 44 }}>
                       <Avatar sx={{
-                        bgcolor: isUrgent ? 'rgba(249,115,22,0.12)' : 'rgba(79,70,229,0.12)',
-                        color: isUrgent ? '#F97316' : '#4F46E5',
+                        bgcolor: isUrgent ? 'rgba(249,115,22,0.12)' : 'rgba(var(--indigo-rgb), 0.12)',
+                        color: isUrgent ? '#F97316' : 'var(--indigo)',
                         width: 36, height: 36, borderRadius: '10px'
                       }}>
                         {isUrgent ? <WarningIcon fontSize="small" /> : <InfoIcon fontSize="small" />}

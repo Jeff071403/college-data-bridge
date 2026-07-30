@@ -25,7 +25,7 @@ const CustomBarTooltip = ({ active, payload, label }) => {
   return (
     <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: '10px', p: 1.5, boxShadow: '0 4px 20px rgba(0,0,0,0.12)' }}>
       <Typography sx={{ fontWeight: 700, fontSize: '0.82rem', mb: 0.5 }}>{label}</Typography>
-      <Typography sx={{ fontSize: '0.8rem', color: '#4F46E5', fontWeight: 800 }}>{payload[0].value} MOUs</Typography>
+      <Typography sx={{ fontSize: '0.8rem', color: 'var(--indigo)', fontWeight: 800 }}>{payload[0].value} MOUs</Typography>
     </Box>
   );
 };
@@ -105,7 +105,7 @@ const Reports = () => {
     { name: 'Expired',  value: expired,  color: '#F43F5E' },
   ];
 
-  const BAR_COLORS = ['#4F46E5', '#14B8A6', '#F59E0B', '#EC4899', '#3B82F6', '#8B5CF6'];
+  const BAR_COLORS = ['var(--indigo)', '#14B8A6', '#F59E0B', '#EC4899', '#3B82F6', '#8B5CF6'];
   const deptData = (reports?.department_breakdown || []).map((d, i) => ({
     name: d.department_name || `Dept ${i + 1}`,
     count: d.total,
@@ -139,9 +139,9 @@ const Reports = () => {
       <Box sx={{ mb: 3.5, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Avatar sx={{
-            background: 'linear-gradient(135deg, #4F46E5, #7C3AED)',
+            background: 'linear-gradient(135deg, var(--indigo), var(--violet))',
             width: 52, height: 52, borderRadius: '16px',
-            boxShadow: '0 4px 14px rgba(79,70,229,0.35)',
+            boxShadow: '0 4px 14px rgba(var(--indigo-rgb), 0.35)',
           }}>
             <AssessmentIcon sx={{ fontSize: '1.6rem' }} />
           </Avatar>
@@ -168,7 +168,7 @@ const Reports = () => {
             variant="contained"
             startIcon={<DownloadIcon />}
             onClick={exportCSV}
-            sx={{ borderRadius: '24px', fontWeight: 700, px: 2.5, background: 'linear-gradient(135deg, #4F46E5, #7C3AED)', boxShadow: '0 4px 14px rgba(79,70,229,0.3)', '&:hover': { boxShadow: '0 6px 20px rgba(79,70,229,0.4)' } }}
+            sx={{ borderRadius: '24px', fontWeight: 700, px: 2.5, background: 'linear-gradient(135deg, var(--indigo), var(--violet))', boxShadow: '0 4px 14px rgba(var(--indigo-rgb), 0.3)', '&:hover': { boxShadow: '0 6px 20px rgba(var(--indigo-rgb), 0.4)' } }}
           >
             Export CSV
           </Button>
@@ -181,8 +181,8 @@ const Reports = () => {
           <StatCard
             label="Total MOUs" value={totalMous}
             icon={<GavelIcon />}
-            gradient="linear-gradient(90deg, #4F46E5, #7C3AED)"
-            lightBg="rgba(79,70,229,0.1)" textColor="#4F46E5"
+            gradient="linear-gradient(90deg, var(--indigo), var(--violet))"
+            lightBg="rgba(var(--indigo-rgb), 0.1)" textColor="var(--indigo)"
             sub="All registered agreements"
           />
         </Grid>
@@ -250,7 +250,7 @@ const Reports = () => {
                 <Typography sx={{ fontWeight: 800, fontSize: '1rem' }}>Department Distribution</Typography>
                 <Typography variant="caption" color="text.secondary">MOUs by department</Typography>
               </Box>
-              <Avatar sx={{ bgcolor: 'rgba(79,70,229,0.08)', color: 'primary.main', borderRadius: '10px', width: 36, height: 36 }}>
+              <Avatar sx={{ bgcolor: 'rgba(var(--indigo-rgb), 0.08)', color: 'primary.main', borderRadius: '10px', width: 36, height: 36 }}>
                 <BusinessIcon fontSize="small" />
               </Avatar>
             </Box>
@@ -265,7 +265,7 @@ const Reports = () => {
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
                     <XAxis dataKey="name" stroke="#94A3B8" fontSize={11} tickLine={false} axisLine={false} />
                     <YAxis stroke="#94A3B8" fontSize={11} tickLine={false} axisLine={false} allowDecimals={false} />
-                    <RechartsTooltip content={<CustomBarTooltip />} cursor={{ fill: 'rgba(79,70,229,0.04)' }} />
+                    <RechartsTooltip content={<CustomBarTooltip />} cursor={{ fill: 'rgba(var(--indigo-rgb), 0.04)' }} />
                     <Bar dataKey="count" radius={[8, 8, 0, 0]}>
                       {deptData.map((entry, index) => (
                         <Cell key={index} fill={entry.fill} />
@@ -328,7 +328,7 @@ const Reports = () => {
               <Typography sx={{ fontWeight: 800, fontSize: '1rem' }}>Department Breakdown</Typography>
               <Typography variant="caption" color="text.secondary">Detailed MOU counts by department</Typography>
             </Box>
-            <Chip label={`${deptData.length} departments`} size="small" sx={{ fontWeight: 700, bgcolor: 'rgba(79,70,229,0.08)', color: 'primary.main' }} />
+            <Chip label={`${deptData.length} departments`} size="small" sx={{ fontWeight: 700, bgcolor: 'rgba(var(--indigo-rgb), 0.08)', color: 'primary.main' }} />
           </Box>
           <Divider />
           <TableContainer>

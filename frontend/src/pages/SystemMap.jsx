@@ -115,8 +115,8 @@ const STAGES = [
 
 /* ─── Role colour map ───────────────────────────────────── */
 const ROLE_COLORS = {
-  'Super Admin': '#4F46E5',
-  'Admin': '#7C3AED',
+  'Super Admin': 'var(--indigo)',
+  'Admin': 'var(--violet)',
   'Lawyer / MOU Administrator': '#0EA5E9',
   'Compliance Officers / Lawyers': '#0EA5E9',
   'MOU Owner': '#10B981',
@@ -175,7 +175,7 @@ const StageNode = ({ stage, index, onClick, isActive }) => (
 const Connector = () => (
   <Box sx={{ display: 'flex', alignItems: 'center', mt: '-20px', flex: 1, minWidth: 20, maxWidth: 60 }}>
     <Box className="lifecycle-line" sx={{ flex: 1 }} />
-    <ArrowForwardIcon sx={{ fontSize: '0.9rem', color: 'rgba(79,70,229,0.4)', flexShrink: 0 }} />
+    <ArrowForwardIcon sx={{ fontSize: '0.9rem', color: 'rgba(var(--indigo-rgb), 0.4)', flexShrink: 0 }} />
   </Box>
 );
 
@@ -260,11 +260,11 @@ const StageDrawer = ({ stage, onClose }) => {
         <Divider sx={{ mb: 2 }} />
 
         {/* Tip */}
-        <Box sx={{ p: 2, borderRadius: '12px', bgcolor: 'rgba(79,70,229,0.06)', border: '1px solid rgba(79,70,229,0.15)' }}>
+        <Box sx={{ p: 2, borderRadius: '12px', bgcolor: 'rgba(var(--indigo-rgb), 0.06)', border: '1px solid rgba(var(--indigo-rgb), 0.15)' }}>
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
             <InfoOutlinedIcon sx={{ color: 'primary.main', fontSize: '1rem', mt: 0.15, flexShrink: 0 }} />
             <Typography variant="caption" sx={{ color: 'text.secondary', lineHeight: 1.6, fontSize: '0.78rem' }}>
-              <strong style={{ color: '#4F46E5' }}>Tip: </strong>{stage.tip}
+              <strong style={{ color: 'var(--indigo)' }}>Tip: </strong>{stage.tip}
             </Typography>
           </Box>
         </Box>
@@ -285,7 +285,7 @@ const SystemMap = () => {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
           <Box sx={{
             width: 40, height: 40, borderRadius: '12px',
-            background: 'linear-gradient(135deg, #4F46E5, #7C3AED)',
+            background: 'linear-gradient(135deg, var(--indigo), var(--violet))',
             display: 'flex', alignItems: 'center', justifyContent: 'center'
           }}>
             <HelpCenterIcon sx={{ color: '#fff', fontSize: '1.3rem' }} />
@@ -316,9 +316,9 @@ const SystemMap = () => {
           ))}
           {/* Arrow going down */}
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mx: 2, mt: '-20px' }}>
-            <Box sx={{ width: 2, height: 32, background: 'linear-gradient(180deg, rgba(79,70,229,0.4), rgba(124,58,237,0.4))' }} />
+            <Box sx={{ width: 2, height: 32, background: 'linear-gradient(180deg, rgba(var(--indigo-rgb), 0.4), rgba(var(--violet-rgb), 0.4))' }} />
             <Box sx={{ transform: 'rotate(90deg)' }}>
-              <ArrowForwardIcon sx={{ fontSize: '0.9rem', color: 'rgba(79,70,229,0.4)' }} />
+              <ArrowForwardIcon sx={{ fontSize: '0.9rem', color: 'rgba(var(--indigo-rgb), 0.4)' }} />
             </Box>
           </Box>
         </Box>
@@ -331,7 +331,7 @@ const SystemMap = () => {
               {i < STAGES.slice(4).length - 1 && (
                 <Box sx={{ display: 'flex', alignItems: 'center', mt: '-20px', flex: 1, minWidth: 20, maxWidth: 60, transform: 'scaleX(-1)' }}>
                   <Box className="lifecycle-line" sx={{ flex: 1 }} />
-                  <ArrowForwardIcon sx={{ fontSize: '0.9rem', color: 'rgba(79,70,229,0.4)', flexShrink: 0 }} />
+                  <ArrowForwardIcon sx={{ fontSize: '0.9rem', color: 'rgba(var(--indigo-rgb), 0.4)', flexShrink: 0 }} />
                 </Box>
               )}
             </React.Fragment>
@@ -343,19 +343,29 @@ const SystemMap = () => {
       <Card sx={{ p: 3, borderRadius: '20px', mb: 4 }}>
         <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 2 }}>Role Colour Legend</Typography>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.2 }}>
-          {Object.entries(ROLE_COLORS).slice(0, 6).map(([role, color]) => (
-            <Chip
-              key={role}
-              label={role}
-              size="small"
-              sx={{ bgcolor: `${color}12`, color, fontWeight: 600, borderRadius: '8px', fontSize: '0.72rem' }}
-            />
-          ))}
+          {Object.entries(ROLE_COLORS).slice(0, 6).map(([role, color]) => {
+            const isVar = color.startsWith('var(');
+            const varRgb = color.includes('indigo') ? 'var(--indigo-rgb)' : 'var(--violet-rgb)';
+            return (
+              <Chip
+                key={role}
+                label={role}
+                size="small"
+                sx={{
+                  bgcolor: isVar ? `rgba(${varRgb}, 0.08)` : `${color}12`,
+                  color,
+                  fontWeight: 600,
+                  borderRadius: '8px',
+                  fontSize: '0.72rem'
+                }}
+              />
+            );
+          })}
         </Box>
       </Card>
 
       {/* Quick-start Guide */}
-      <Card sx={{ p: 3, borderRadius: '20px', background: 'linear-gradient(135deg, rgba(79,70,229,0.05) 0%, rgba(124,58,237,0.05) 100%)', border: '1px solid rgba(79,70,229,0.15)' }}>
+      <Card sx={{ p: 3, borderRadius: '20px', background: 'linear-gradient(135deg, rgba(var(--indigo-rgb), 0.05) 0%, rgba(var(--violet-rgb), 0.05) 100%)', border: '1px solid rgba(var(--indigo-rgb), 0.15)' }}>
         <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 2 }}>
           🚀 Quick-start for New Users
         </Typography>

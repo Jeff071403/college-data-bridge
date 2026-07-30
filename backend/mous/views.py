@@ -182,6 +182,7 @@ class MOUSubmitSignedView(APIView):
         signed_date_str = request.data.get('signed_date')
         signed_file_id = request.data.get('signed_mou_id')
         duration = request.data.get('duration_months')
+        uploaded_file = request.FILES.get('file') or request.FILES.get('mou_file')
 
         if signed_date_str:
             try:
@@ -197,16 +198,71 @@ class MOUSubmitSignedView(APIView):
         # Calculate Expiry
         mou.expiry_date = mou.calculate_expiry(mou.signed_date, mou.duration_months)
 
-        if signed_file_id:
-            try:
-                f = File.objects.get(id=signed_file_id)
-                mou.signed_mou = f
-                MOUDocument.objects.create(mou=mou, document_type='signed', file=f, uploaded_by=request.user)
-            except File.DoesNotExist:
-                pass
+        with transaction.atomic():
+            if uploaded_file:
+                mou.mou_file = uploaded_file
+                
+                # Setup Google Drive upload under Signed copies
+                import mimetypes
+                file_type, _ = mimetypes.guess_type(uploaded_file.name)
+                if not file_type:
+                    file_type = "application/octet-stream"
+                
+                submission_folder = None
+                if mou.department:
+                    from folders.models import Folder
+                    from services import drive_service
+                    submission_folder, _ = Folder.objects.get_or_create(
+                        name="Signed Copies",
+                        parent=mou.department,
+                        defaults={'created_by': request.user}
+                    )
+                    if not submission_folder.google_folder_id:
+                        try:
+                            google_id = drive_service.create_folder(submission_folder.name, mou.department.google_folder_id)
+                            submission_folder.google_folder_id = google_id
+                            submission_folder.save(update_fields=['google_folder_id'])
+                        except Exception:
+                            pass
+                
+                from files.models import File
+                from services import drive_service
+                signed_file = File.objects.create(
+                    name=uploaded_file.name,
+                    size=uploaded_file.size,
+                    file_type=file_type,
+                    folder=submission_folder or mou.department,
+                    uploaded_by=request.user
+                )
+                
+                try:
+                    drive_meta = drive_service.upload_file(
+                        uploaded_file,
+                        uploaded_file.name,
+                        file_type,
+                        submission_folder.google_folder_id if submission_folder else None
+                    )
+                    signed_file.google_file_id = drive_meta['id']
+                    signed_file.mime_type = drive_meta['mimeType']
+                    signed_file.file_size = drive_meta['size']
+                    signed_file.web_view_link = drive_meta['webViewLink']
+                    signed_file.web_content_link = drive_meta['webContentLink']
+                except Exception as drive_err:
+                    logger.warning(f"Google Drive sync skipped: {drive_err}")
+                signed_file.save()
+                
+                mou.signed_mou = signed_file
+                MOUDocument.objects.create(mou=mou, document_type='signed', file=signed_file, uploaded_by=request.user)
+            elif signed_file_id:
+                try:
+                    f = File.objects.get(id=signed_file_id)
+                    mou.signed_mou = f
+                    MOUDocument.objects.create(mou=mou, document_type='signed', file=f, uploaded_by=request.user)
+                except File.DoesNotExist:
+                    pass
 
-        mou.status = 'Pending Verification'
-        mou.save()
+            mou.status = 'Pending Verification'
+            mou.save()
 
         log_activity(request.user, f"Submitted signed MOU for '{mou.title}'. Expiry date: {mou.expiry_date}")
         send_notification(request.user, f"Signed MOU Uploaded: {mou.title}", f"Status is now Pending Verification. Expiry date calculated as {mou.expiry_date}.")
@@ -589,7 +645,14 @@ class DepartmentSubmissionView(APIView):
             mou.signed_mou = signed_file
             mou.signed_date = signed_date
             mou.status = 'Pending Verification'
-            mou.save(update_fields=['signed_mou', 'signed_date', 'duration_months', 'expiry_date', 'status'])
+            if uploaded_file:
+                mou.mou_file = uploaded_file
+            mou.save(update_fields=['signed_mou', 'signed_date', 'duration_months', 'expiry_date', 'status', 'mou_file'])
+            
+            # Update folder status to Signed
+            if mou.department:
+                mou.department.status = 'Signed'
+                mou.department.save(update_fields=['status'])
             
             # Create document link
             mou_doc = MOUDocument.objects.create(

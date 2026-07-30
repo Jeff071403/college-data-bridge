@@ -12,7 +12,7 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import api from '../services/api';
 
 const MODULE_COLORS = {
-  'Users': { bg: 'rgba(124, 58, 237, 0.12)', color: '#7C3AED' },
+  'Users': { bg: 'rgba(var(--violet-rgb), 0.12)', color: 'var(--violet)' },
   'Folders': { bg: 'rgba(59, 130, 246, 0.12)', color: '#3B82F6' },
   'Files': { bg: 'rgba(16, 185, 129, 0.12)', color: '#10B981' },
   'Auth': { bg: 'rgba(245, 158, 11, 0.12)', color: '#F59E0B' },
@@ -105,7 +105,7 @@ const ActivityLog = () => {
       </Box>
 
       {/* Living Changelog Summary Panel for New Admins */}
-      <Card sx={{ mb: 3.5, p: 2.5, borderRadius: '18px', border: '1px solid', borderColor: 'divider', background: 'linear-gradient(135deg, rgba(79,70,229,0.04) 0%, rgba(124,58,237,0.04) 100%)' }}>
+      <Card sx={{ mb: 3.5, p: 2.5, borderRadius: '18px', border: '1px solid', borderColor: 'divider', background: 'linear-gradient(135deg, rgba(var(--indigo-rgb), 0.04) 0%, rgba(var(--violet-rgb), 0.04) 100%)' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
           <HistoryIcon sx={{ color: 'primary.main', fontSize: '1.2rem' }} />
           <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
@@ -116,7 +116,7 @@ const ActivityLog = () => {
           A quick glance at system configuration updates, user permission modifications, and template activities for quick onboarding of new administrators.
         </Typography>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-          <Chip label="Latest 50 System Events Recorded" size="small" sx={{ bgcolor: 'rgba(79,70,229,0.1)', color: '#4F46E5', fontWeight: 700 }} />
+          <Chip label="Latest 50 System Events Recorded" size="small" sx={{ bgcolor: 'rgba(var(--indigo-rgb), 0.1)', color: 'var(--indigo)', fontWeight: 700 }} />
           <Chip label="Automated Daily Backup Active" size="small" sx={{ bgcolor: 'rgba(16,185,129,0.1)', color: '#10B981', fontWeight: 700 }} />
           <Chip label="Immutable Audit Logs" size="small" sx={{ bgcolor: 'rgba(245,158,11,0.1)', color: '#F59E0B', fontWeight: 700 }} />
         </Box>

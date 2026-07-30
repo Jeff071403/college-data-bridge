@@ -26,6 +26,7 @@ import GetAppIcon from '@mui/icons-material/GetApp';
 import EditIcon from '@mui/icons-material/Edit';
 import SecurityIcon from '@mui/icons-material/Security';
 import DeleteIcon from '@mui/icons-material/Delete';
+import InfoIcon from '@mui/icons-material/Info';
 
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -55,6 +56,47 @@ const FolderExplorer = () => {
       default:
         return '#8B5CF6';
     }
+  };
+
+  const getDynamicFolderColor = (folder) => {
+    if (folder.expiry_date) {
+      const expiry = new Date(folder.expiry_date);
+      const today = new Date();
+      expiry.setHours(0,0,0,0);
+      today.setHours(0,0,0,0);
+      const diffTime = expiry - today;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      if (diffDays <= 30) {
+        return '#EF4444';
+      }
+    }
+    if (folder.status === 'Signed') {
+      return '#10B981';
+    }
+    if (folder.is_viewed === false) {
+      return '#3B82F6';
+    }
+    return getFolderStatusColor(folder.status);
+  };
+
+  const getDynamicFolderLabel = (folder) => {
+    if (folder.expiry_date) {
+      const expiry = new Date(folder.expiry_date);
+      const today = new Date();
+      expiry.setHours(0,0,0,0);
+      today.setHours(0,0,0,0);
+      const diffTime = expiry - today;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      if (diffDays <= 0) return 'Expired';
+      if (diffDays <= 30) return 'Expiring Soon';
+    }
+    if (folder.status === 'Signed') {
+      return 'Signed';
+    }
+    if (folder.is_viewed === false) {
+      return 'New';
+    }
+    return folder.status || 'Active';
   };
 
   const folderParam = searchParams.get('folder');
@@ -118,6 +160,22 @@ const FolderExplorer = () => {
   const [renameName, setRenameName] = useState('');
   const [folderStatus, setFolderStatus] = useState('Active');
   const [renameStatus, setRenameStatus] = useState('Active');
+  const [folderSummary, setFolderSummary] = useState('');
+  const [folderExpiryDate, setFolderExpiryDate] = useState('');
+
+  const [auditDialogOpen, setAuditDialogOpen] = useState(false);
+  const [auditData, setAuditData] = useState(null);
+  const [auditLoading, setAuditLoading] = useState(false);
+
+  const [isSignedUpload, setIsSignedUpload] = useState(false);
+  const [uploadSummary, setUploadSummary] = useState('');
+
+  useEffect(() => {
+    if (fileDialogOpen) {
+      setIsSignedUpload(user?.role?.name !== 'Super Admin' && user?.role?.name !== 'Admin');
+      setUploadSummary('');
+    }
+  }, [fileDialogOpen, user]);
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
@@ -238,7 +296,7 @@ const FolderExplorer = () => {
   // Add Folder
   const handleCreateFolderSubmit = async (e) => {
     e.preventDefault();
-    if (!folderName.trim()) return;
+    if (!folderName.trim() || !folderSummary.trim() || !folderExpiryDate) return;
 
     setActionLoadingMessage('Creating folder...');
     try {
@@ -246,11 +304,15 @@ const FolderExplorer = () => {
         name: folderName.trim(),
         parent_id: currentFolderId,
         status: folderStatus,
+        summary: folderSummary.trim(),
+        expiry_date: folderExpiryDate,
         created_at: getFormattedSiteDateTime()
       });
       setFolderDialogOpen(false);
       setFolderName('');
       setFolderStatus('Active');
+      setFolderSummary('');
+      setFolderExpiryDate('');
       fetchContents();
     } catch (err) {
       setError(err.response?.data?.detail || "Failed to create folder.");
@@ -259,7 +321,23 @@ const FolderExplorer = () => {
     }
   };
 
-  // Upload File
+  const handleOpenAudit = async (folderId) => {
+    const targetId = folderId || activeItem?.data?.id || currentFolderId;
+    if (!targetId) return;
+    setAuditLoading(true);
+    setAuditDialogOpen(true);
+    handleMenuClose();
+    try {
+      const res = await api.get(`/api/folders/${targetId}/audit/`);
+      setAuditData(res.data);
+    } catch (err) {
+      console.error("Failed to load audit logs:", err);
+      setError("Failed to load directory activity insights.");
+    } finally {
+      setAuditLoading(false);
+    }
+  };
+
   const handleFileUploadSubmit = async (e) => {
     e.preventDefault();
     if (!selectedFile) return;
@@ -268,6 +346,8 @@ const FolderExplorer = () => {
     formData.append('file', selectedFile);
     formData.append('folder_id', currentFolderId);
     formData.append('created_at', getFormattedSiteDateTime());
+    formData.append('is_signed', isSignedUpload ? 'true' : 'false');
+    formData.append('summary', uploadSummary.trim());
 
     try {
       await api.post('/api/files/', formData, {
@@ -275,6 +355,8 @@ const FolderExplorer = () => {
       });
       setFileDialogOpen(false);
       setSelectedFile(null);
+      setUploadSummary('');
+      setSuccess(isSignedUpload ? "Signed copy uploaded successfully! Folder status updated to Signed." : "File uploaded successfully.");
       fetchContents();
     } catch (err) {
       setError(err.response?.data?.detail || "Failed to upload file.");
@@ -792,12 +874,12 @@ const FolderExplorer = () => {
                                 position: 'relative',
                                 border: '1px solid',
                                 borderColor: 'divider',
-                                borderLeft: `4px solid ${getFolderStatusColor(folder.status)}`,
+                                borderLeft: `4px solid ${getDynamicFolderColor(folder)}`,
                                 bgcolor: 'background.paper',
                                 transition: 'all 0.22s ease',
                                 '&:hover': { 
-                                  borderColor: getFolderStatusColor(folder.status), 
-                                  bgcolor: `${getFolderStatusColor(folder.status)}08`,
+                                  borderColor: getDynamicFolderColor(folder), 
+                                  bgcolor: `${getDynamicFolderColor(folder)}08`,
                                 }
                               }}
                               onDoubleClick={() => handleFolderClick(folder.id)}
@@ -810,22 +892,22 @@ const FolderExplorer = () => {
                               >
                                 <MoreVertIcon fontSize="small" />
                               </IconButton>
-
+ 
                               <CardContent sx={{ p: 2.5, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', height: '100%', '&:last-child': { pb: 2.5 } }}>
-                                <FolderIcon sx={{ color: getFolderStatusColor(folder.status), fontSize: 56, mb: 1, filter: `drop-shadow(0 4px 10px ${getFolderStatusColor(folder.status)}30)` }} />
+                                <FolderIcon sx={{ color: getDynamicFolderColor(folder), fontSize: 56, mb: 1, filter: `drop-shadow(0 4px 10px ${getDynamicFolderColor(folder)}30)` }} />
                                 
                                 <Chip 
-                                  label={folder.status || 'Active'} 
+                                  label={getDynamicFolderLabel(folder)} 
                                   size="small" 
                                   sx={{ 
                                     fontSize: '0.65rem', 
                                     height: 18, 
                                     mb: 1.2, 
                                     fontWeight: 700, 
-                                    color: getFolderStatusColor(folder.status), 
-                                    bgcolor: `${getFolderStatusColor(folder.status)}12`, 
+                                    color: getDynamicFolderColor(folder), 
+                                    bgcolor: `${getDynamicFolderColor(folder)}12`, 
                                     border: '1px solid',
-                                    borderColor: `${getFolderStatusColor(folder.status)}24`,
+                                    borderColor: `${getDynamicFolderColor(folder)}24`,
                                     textTransform: 'uppercase',
                                     letterSpacing: '0.5px'
                                   }} 
@@ -834,6 +916,11 @@ const FolderExplorer = () => {
                                 <Typography variant="subtitle2" sx={{ fontWeight: 800, fontSize: '0.9rem', mb: 0.5, px: 0.5 }} noWrap>
                                   {folder.name}
                                 </Typography>
+                                {folder.summary && (
+                                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontStyle: 'italic', mb: 0.5 }} noWrap>
+                                    {folder.summary}
+                                  </Typography>
+                                )}
                                 
                                 <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
                                   {folder.file_count} files • {folder.subfolder_count} folders
@@ -866,24 +953,33 @@ const FolderExplorer = () => {
                               onDoubleClick={() => handleFolderClick(folder.id)}
                               style={{ cursor: 'pointer' }}
                             >
-                              <TableCell sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 1.5 }}>
-                                <FolderIcon sx={{ color: getFolderStatusColor(folder.status), fontSize: 24 }} />
-                                <Typography variant="body2" sx={{ fontWeight: 600 }}>{folder.name}</Typography>
+                              <TableCell sx={{ py: 1.5 }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                  <FolderIcon sx={{ color: getDynamicFolderColor(folder), fontSize: 24 }} />
+                                  <Box>
+                                    <Typography variant="body2" sx={{ fontWeight: 600 }}>{folder.name}</Typography>
+                                    {folder.summary && (
+                                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontStyle: 'italic', fontSize: '0.72rem' }}>
+                                        {folder.summary}
+                                      </Typography>
+                                    )}
+                                  </Box>
+                                </Box>
                               </TableCell>
                               <TableCell>{folder.created_by?.name || 'System'}</TableCell>
                               <TableCell>{new Date(folder.updated_at).toLocaleDateString()}</TableCell>
                               <TableCell>
                                 <Chip 
-                                  label={folder.status || 'Active'} 
+                                  label={getDynamicFolderLabel(folder)} 
                                   size="small" 
                                   sx={{ 
                                     fontSize: '0.7rem', 
                                     height: 20, 
                                     fontWeight: 700, 
-                                    color: getFolderStatusColor(folder.status), 
-                                    bgcolor: `${getFolderStatusColor(folder.status)}12`, 
+                                    color: getDynamicFolderColor(folder), 
+                                    bgcolor: `${getDynamicFolderColor(folder)}12`, 
                                     border: '1px solid',
-                                    borderColor: `${getFolderStatusColor(folder.status)}24`,
+                                    borderColor: `${getDynamicFolderColor(folder)}24`,
                                     textTransform: 'uppercase',
                                     letterSpacing: '0.5px'
                                   }} 
@@ -1078,48 +1174,14 @@ const FolderExplorer = () => {
       )}
 
       {/* Row Context Menu */}
-      <Menu
-        anchorEl={menuAnchor}
-        open={Boolean(menuAnchor)}
-        onClose={handleMenuClose}
-      >
-        {activeItem?.type === 'file' && (
-          <MenuItem onClick={handleDownloadClick}>
-            <ListItemIcon><GetAppIcon fontSize="small" /></ListItemIcon>
-            <ListItemText>Download</ListItemText>
-          </MenuItem>
-        )}
-        
-        {(activeItem?.type === 'folder' || activeItem?.type === 'file') && (
-          <MenuItem onClick={handleRenameClick}>
-            <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
-            <ListItemText>Rename</ListItemText>
-          </MenuItem>
-        )}
 
-        {activeItem?.type === 'folder' && (
-          <MenuItem onClick={handleAccessClick}>
-            <ListItemIcon><SecurityIcon fontSize="small" /></ListItemIcon>
-            <ListItemText>Share Settings</ListItemText>
-          </MenuItem>
-        )}
-
-        <Divider />
-
-        {(activeItem?.type === 'folder' || activeItem?.type === 'file') && (
-          <MenuItem onClick={handleDeleteClick} sx={{ color: 'error.main' }}>
-            <ListItemIcon><DeleteIcon fontSize="small" color="error" /></ListItemIcon>
-            <ListItemText>Delete</ListItemText>
-          </MenuItem>
-        )}
-      </Menu>
 
       {/* Dialogs */}
       {/* Create Folder Dialog */}
       <Dialog open={folderDialogOpen} onClose={() => setFolderDialogOpen(false)}>
         <form onSubmit={handleCreateFolderSubmit}>
           <DialogTitle>Create New Folder</DialogTitle>
-          <DialogContent sx={{ minWidth: 320 }}>
+          <DialogContent sx={{ minWidth: 350 }}>
             <TextField
               autoFocus
               margin="dense"
@@ -1128,6 +1190,29 @@ const FolderExplorer = () => {
               fullWidth
               value={folderName}
               onChange={(e) => setFolderName(e.target.value)}
+              required
+            />
+            <TextField
+              margin="dense"
+              label="Folder Summary"
+              type="text"
+              fullWidth
+              multiline
+              rows={3}
+              value={folderSummary}
+              onChange={(e) => setFolderSummary(e.target.value)}
+              required
+              sx={{ mt: 2 }}
+            />
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 2, mb: 0.5, fontWeight: 600 }}>
+              Expiry Date *
+            </Typography>
+            <TextField
+              margin="dense"
+              type="date"
+              fullWidth
+              value={folderExpiryDate}
+              onChange={(e) => setFolderExpiryDate(e.target.value)}
               required
             />
             <FormControl fullWidth margin="dense" sx={{ mt: 2 }}>
@@ -1170,9 +1255,33 @@ const FolderExplorer = () => {
                 type="file"
                 hidden
                 onChange={(e) => setSelectedFile(e.target.files[0])}
-                required
               />
             </Button>
+            <FormControlLabel
+              control={
+                <Switch 
+                  checked={isSignedUpload}
+                  onChange={(e) => setIsSignedUpload(e.target.checked)}
+                />
+              }
+              label="Mark as Signed Copy"
+              sx={{ mt: 2, display: 'block' }}
+            />
+            {isSignedUpload && (
+              <TextField
+                margin="dense"
+                label="Upload Summary / Comments"
+                placeholder="Describe what you are uploading (e.g. Executed Agreement)..."
+                type="text"
+                fullWidth
+                multiline
+                rows={2}
+                value={uploadSummary}
+                onChange={(e) => setUploadSummary(e.target.value)}
+                required
+                sx={{ mt: 1.5 }}
+              />
+            )}
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setFileDialogOpen(false)}>Cancel</Button>
@@ -1233,6 +1342,187 @@ const FolderExplorer = () => {
         <DialogActions>
           <Button onClick={() => { setDeleteDialogOpen(false); setActiveItem(null); }}>Cancel</Button>
           <Button onClick={handleDeleteSubmit} color="error" variant="contained">Delete</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Folder Audit & Activity Dialog */}
+      <Dialog 
+        open={auditDialogOpen} 
+        onClose={() => setAuditDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: { borderRadius: '24px', p: 1 }
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 800, pb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <FolderIcon color="primary" /> Directory Activity & Ownership Registry
+        </DialogTitle>
+        <DialogContent dividers sx={{ maxHeight: '70vh' }}>
+          {auditLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+              <CircularProgress />
+            </Box>
+          ) : !auditData ? (
+            <Typography color="text.secondary">No insights available.</Typography>
+          ) : (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3.5 }}>
+              {/* Parent Folder Info */}
+              <Card variant="outlined" sx={{ p: 2.5, borderRadius: '16px', bgcolor: 'action.hover' }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+                  Parent Folder Details
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body2" color="text.secondary">Folder Name</Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 700 }}>{auditData.folder.name}</Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body2" color="text.secondary">Creator / Owner</Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 700, color: 'primary.main' }}>
+                      {auditData.folder.created_by}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={3}>
+                    <Typography variant="body2" color="text.secondary">Created Date</Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                      {new Date(auditData.folder.created_at).toLocaleDateString()}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={3}>
+                    <Typography variant="body2" color="text.secondary">Created Time</Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                      {new Date(auditData.folder.created_at).toLocaleTimeString()}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={3}>
+                    <Typography variant="body2" color="text.secondary">Last Updated Date</Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                      {new Date(auditData.folder.updated_at).toLocaleDateString()}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={3}>
+                    <Typography variant="body2" color="text.secondary">Last Updated Time</Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                      {new Date(auditData.folder.updated_at).toLocaleTimeString()}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body2" color="text.secondary">Status</Typography>
+                    <Chip label={auditData.folder.status} size="small" color="primary" sx={{ fontWeight: 700, mt: 0.5 }} />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body2" color="text.secondary">Expiry Date</Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 600, color: 'error.main' }}>
+                      {auditData.folder.expiry_date ? new Date(auditData.folder.expiry_date).toLocaleDateString() : 'None Set'}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Typography variant="body2" color="text.secondary">Summary</Typography>
+                    <Typography variant="body2" sx={{ fontStyle: 'italic', mt: 0.5 }}>
+                      {auditData.folder.summary || 'No summary description provided.'}
+                    </Typography>
+                  </Grid>
+                </Grid>
+              </Card>
+
+              {/* Subfolder Ownership Registry */}
+              <Box>
+                <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 800, mb: 1.5, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Subfolders & Nested Directories ({auditData.subfolders.length})
+                </Typography>
+                {auditData.subfolders.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary" sx={{ pl: 1 }}>No subfolders found inside this directory tree.</Typography>
+                ) : (
+                  <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: '12px', overflow: 'hidden' }}>
+                    <Table size="small">
+                      <TableHead sx={{ bgcolor: 'action.hover' }}>
+                        <TableRow>
+                          <TableCell sx={{ fontWeight: 700 }}>Folder Path / Name</TableCell>
+                          <TableCell sx={{ fontWeight: 700 }}>Created By</TableCell>
+                          <TableCell sx={{ fontWeight: 700 }}>Created Date</TableCell>
+                          <TableCell sx={{ fontWeight: 700 }}>Created Time</TableCell>
+                          <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {auditData.subfolders.map((sub) => (
+                          <TableRow key={sub.id} hover>
+                            <TableCell>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <FolderIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                                <Box>
+                                  {sub.path.length > 0 && (
+                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.65rem' }}>
+                                      {sub.path.map(p => p.name).join(' / ')}
+                                    </Typography>
+                                  )}
+                                  <Typography variant="body2" sx={{ fontWeight: 700 }}>{sub.name}</Typography>
+                                </Box>
+                              </Box>
+                            </TableCell>
+                            <TableCell><Typography variant="body2" sx={{ fontWeight: 600 }}>{sub.created_by}</Typography></TableCell>
+                            <TableCell><Typography variant="body2">{new Date(sub.created_at).toLocaleDateString()}</Typography></TableCell>
+                            <TableCell><Typography variant="body2">{new Date(sub.created_at).toLocaleTimeString()}</Typography></TableCell>
+                            <TableCell><Chip label={sub.status} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.65rem', fontWeight: 700 }} /></TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
+              </Box>
+
+              {/* File Tracking Registry */}
+              <Box>
+                <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 800, mb: 1.5, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Files Activity & Upload Log ({auditData.files.length})
+                </Typography>
+                {auditData.files.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary" sx={{ pl: 1 }}>No files uploaded inside this directory tree.</Typography>
+                ) : (
+                  <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: '12px', overflow: 'hidden' }}>
+                    <Table size="small">
+                      <TableHead sx={{ bgcolor: 'action.hover' }}>
+                        <TableRow>
+                          <TableCell sx={{ fontWeight: 700 }}>File Name</TableCell>
+                          <TableCell sx={{ fontWeight: 700 }}>Folder Location</TableCell>
+                          <TableCell sx={{ fontWeight: 700 }}>Uploaded By</TableCell>
+                          <TableCell sx={{ fontWeight: 700 }}>Upload Date</TableCell>
+                          <TableCell sx={{ fontWeight: 700 }}>Upload Time</TableCell>
+                          <TableCell sx={{ fontWeight: 700 }}>Last Updated Date</TableCell>
+                          <TableCell sx={{ fontWeight: 700 }}>Last Updated Time</TableCell>
+                          <TableCell sx={{ fontWeight: 700 }} align="center">Version</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {auditData.files.map((f) => (
+                          <TableRow key={f.id} hover>
+                            <TableCell sx={{ fontWeight: 700 }}>{f.name}</TableCell>
+                            <TableCell>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                <FolderIcon sx={{ fontSize: 16, color: 'action.active' }} />
+                                <Typography variant="body2" sx={{ fontWeight: 500 }}>{f.folder_name}</Typography>
+                              </Box>
+                            </TableCell>
+                            <TableCell><Typography variant="body2" sx={{ fontWeight: 600 }}>{f.uploaded_by}</Typography></TableCell>
+                            <TableCell><Typography variant="body2">{new Date(f.created_at).toLocaleDateString()}</Typography></TableCell>
+                            <TableCell><Typography variant="body2">{new Date(f.created_at).toLocaleTimeString()}</Typography></TableCell>
+                            <TableCell><Typography variant="body2">{new Date(f.updated_at).toLocaleDateString()}</Typography></TableCell>
+                            <TableCell><Typography variant="body2">{new Date(f.updated_at).toLocaleTimeString()}</Typography></TableCell>
+                            <TableCell align="center"><Chip label={`v${f.version_number}`} size="small" sx={{ height: 18, fontSize: '0.65rem', fontWeight: 600 }} /></TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAuditDialogOpen(false)} variant="contained">Close</Button>
         </DialogActions>
       </Dialog>
 
@@ -1416,6 +1706,10 @@ const FolderExplorer = () => {
                 Share Settings
               </MenuItem>
             )}
+            <MenuItem onClick={() => { handleOpenAudit(activeItem.data.id); }}>
+              <ListItemIcon><InfoIcon fontSize="small" /></ListItemIcon>
+              Folder View Option
+            </MenuItem>
             {hasPermission('delete_folder') && (
               <MenuItem onClick={() => { triggerDelete(activeItem.data, 'folder'); handleMenuClose(); }} sx={{ color: 'error.main' }}>
                 <ListItemIcon><DeleteOutlinedIcon fontSize="small" color="error" /></ListItemIcon>

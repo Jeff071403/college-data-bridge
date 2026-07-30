@@ -71,6 +71,21 @@ class MOUSerializer(serializers.ModelSerializer):
             us = shares.filter(user=user).first()
             if us:
                 return {'permission': us.permission, 'status': us.status}
+                
+            # Check recursive FolderPermission shared by Admin
+            if obj.department:
+                from folders.models import FolderPermission
+                current = obj.department
+                while current is not None:
+                    fp = FolderPermission.objects.filter(user=user, folder=current, is_granted=True).first()
+                    if fp:
+                        perm = 'View Only'
+                        if fp.can_upload:
+                            perm = 'Upload Only'
+                        if fp.can_download and fp.can_upload:
+                            perm = 'Edit'
+                        return {'permission': perm, 'status': 'Shared'}
+                    current = current.parent
         return None
 
     def get_submissions(self, obj):

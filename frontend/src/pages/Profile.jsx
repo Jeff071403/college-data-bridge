@@ -62,7 +62,7 @@ const Profile = () => {
   return (
     <Box sx={{ flexGrow: 1, maxWidth: 900, mx: 'auto' }} className="animate-fade-slide-up">
       <Box sx={{ mb: 4, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-        <Avatar sx={{ background: 'linear-gradient(135deg, #4F46E5, #7C3AED)', width: 44, height: 44, borderRadius: '14px' }}>
+        <Avatar sx={{ background: 'linear-gradient(135deg, var(--indigo), var(--violet))', width: 44, height: 44, borderRadius: '14px' }}>
           <AccountBoxIcon />
         </Avatar>
         <Box>
@@ -81,7 +81,7 @@ const Profile = () => {
           <Card sx={{ borderRadius: '20px', border: '1px solid', borderColor: 'divider', height: '100%' }}>
             <CardContent sx={{ p: 3 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
-                <Avatar sx={{ background: 'linear-gradient(135deg, #4F46E5, #7C3AED)', width: 64, height: 64, fontSize: '1.8rem', fontWeight: 800, color: '#fff', border: '3px solid', borderColor: 'primary.main' }}>
+                <Avatar sx={{ background: 'linear-gradient(135deg, var(--indigo), var(--violet))', width: 64, height: 64, fontSize: '1.8rem', fontWeight: 800, color: '#fff', border: '3px solid', borderColor: 'primary.main' }}>
                   {user?.name?.charAt(0).toUpperCase()}
                 </Avatar>
                 <Box>
@@ -91,7 +91,7 @@ const Profile = () => {
                   <Chip
                     label={user?.role?.name || "Standard User"}
                     size="small"
-                    sx={{ bgcolor: 'rgba(79,70,229,0.12)', color: 'primary.main', fontWeight: 700, mt: 0.5 }}
+                    sx={{ bgcolor: 'rgba(var(--indigo-rgb), 0.12)', color: 'primary.main', fontWeight: 700, mt: 0.5 }}
                   />
                 </Box>
               </Box>
@@ -208,7 +208,7 @@ const Profile = () => {
                     borderRadius: '12px',
                     fontWeight: 700,
                     py: 1.2,
-                    background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)'
+                    background: 'linear-gradient(135deg, var(--indigo) 0%, var(--violet) 100%)'
                   }}
                 >
                   {loading ? 'Updating Password...' : 'Update Password Credentials'}
