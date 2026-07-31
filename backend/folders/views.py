@@ -532,14 +532,46 @@ class FolderViewSet(viewsets.ModelViewSet):
         if root_id:
             self.sync_drive_directory(root_id, None, request.user)
 
-        # Get folders at root level
+        user = request.user
+        
+        # 1. Base query for root folders (no parent)
         root_folders = Folder.objects.filter(parent=None).order_by('name')
         
-        # Filter root folders the user has access to
-        if not (request.user.role and request.user.role.name == "Super Admin"):
-            root_folders = [f for f in root_folders if f.has_access(request.user)]
+        # 2. If user is Super Admin, they see all root folders and don't need orphaned subfolders
+        if user.role and user.role.name == "Super Admin":
+            subfolders_data = FolderSerializer(root_folders, many=True, context={'request': request}).data
+            return Response({
+                "subfolders": subfolders_data,
+                "files": []
+            })
             
-        subfolders_data = FolderSerializer(root_folders, many=True).data
+        # 3. Filter root folders the user has access to
+        accessible_folders = [f for f in root_folders if f.has_access(user)]
+        
+        # 4. Find all subfolders (parent is not None) that the user has direct access to,
+        # but whose parent folder is NOT accessible to the user.
+        # These are "orphaned" shared subfolders that should be shown at the root level.
+        all_subfolders = Folder.objects.exclude(parent=None)
+        for f in all_subfolders:
+            if f.has_access(user):
+                # Check if parent is accessible
+                if f.parent and not f.parent.has_access(user):
+                    # Only add if it's the highest accessible folder in its ancestral chain
+                    ancestor = f.parent
+                    highest_orphan = True
+                    while ancestor is not None:
+                        if ancestor.has_access(user) and (not ancestor.parent or not ancestor.parent.has_access(user)):
+                            highest_orphan = False
+                            break
+                        ancestor = ancestor.parent
+                    
+                    if highest_orphan:
+                        accessible_folders.append(f)
+                        
+        # Sort folders by name
+        accessible_folders.sort(key=lambda x: x.name.lower())
+        
+        subfolders_data = FolderSerializer(accessible_folders, many=True, context={'request': request}).data
         
         return Response({
             "subfolders": subfolders_data,
