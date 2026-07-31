@@ -59,11 +59,20 @@ class FolderSerializer(serializers.ModelSerializer):
 
     def get_path(self, obj):
         """
-        Returns a list of ancestral folders from the root down to the folder.
+        Returns a list of ancestral folders from the root down to the folder with accessibility checks.
         """
+        request = self.context.get('request')
+        user = request.user if request and request.user and request.user.is_authenticated else None
+
         ancestors = obj.get_ancestors()
-        path = [{"id": f.id, "name": f.name} for f in ancestors]
-        path.append({"id": obj.id, "name": obj.name})
+        path = []
+        for f in ancestors:
+            has_access = True
+            if user and not (user.role and user.role.name == "Super Admin"):
+                has_access = f.has_access(user)
+            path.append({"id": f.id, "name": f.name, "accessible": has_access})
+            
+        path.append({"id": obj.id, "name": obj.name, "accessible": True})
         return path
 
     def get_is_viewed(self, obj):

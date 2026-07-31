@@ -22,14 +22,15 @@ const BreadcrumbNav = ({ path = [], onFolderClick }) => {
 
       {path.map((folder, index) => {
         const isLast = index === path.length - 1;
+        const isAccessible = folder.accessible !== false;
         
-        return isLast ? (
+        return isLast || !isAccessible ? (
           <Typography
             key={folder.id}
             color="text.primary"
-            sx={{ display: 'flex', alignItems: 'center', fontWeight: 600 }}
+            sx={{ display: 'flex', alignItems: 'center', fontWeight: isLast ? 600 : 400 }}
           >
-            <FolderIcon sx={{ mr: 0.5, color: '#eab308' }} fontSize="inherit" />
+            <FolderIcon sx={{ mr: 0.5, color: isLast ? '#eab308' : '#94a3b8' }} fontSize="inherit" />
             {folder.name}
           </Typography>
         ) : (

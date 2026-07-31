@@ -85,9 +85,6 @@ class FolderViewSet(viewsets.ModelViewSet):
         'rename_custom': 'rename_folder',
         'delete_custom': 'delete_folder',
         'drive_status': 'view_folder',
-        'assign_access': 'manage_users', # Only admins manage access rules
-        'revoke_access': 'manage_users',
-        'permissions': 'manage_users',
         'audit': 'view_folder',
     }
 
@@ -574,12 +571,28 @@ class FolderViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def permissions(self, request, pk=None):
         folder = self.get_object()
+        user = request.user
+        is_admin = user.role and user.role.name in ["Super Admin", "Admin"]
+        is_creator = folder.created_by == user
+        if not (is_admin or is_creator):
+            return Response(
+                {"detail": "You do not have permission to view access rules for this folder."},
+                status=status.HTTP_403_FORBIDDEN
+            )
         permissions = FolderPermission.objects.filter(folder=folder)
         return Response(FolderPermissionSerializer(permissions, many=True).data)
 
     @action(detail=True, methods=['post'], url_path='revoke-access')
     def revoke_access(self, request, pk=None):
         folder = self.get_object()
+        user = request.user
+        is_admin = user.role and user.role.name in ["Super Admin", "Admin"]
+        is_creator = folder.created_by == user
+        if not (is_admin or is_creator):
+            return Response(
+                {"detail": "You do not have permission to manage access for this folder."},
+                status=status.HTTP_403_FORBIDDEN
+            )
         user_id = request.data.get('user_id')
         
         if not user_id:
@@ -611,6 +624,14 @@ class FolderViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='assign-access')
     def assign_access(self, request, pk=None):
         folder = self.get_object()
+        user = request.user
+        is_admin = user.role and user.role.name in ["Super Admin", "Admin"]
+        is_creator = folder.created_by == user
+        if not (is_admin or is_creator):
+            return Response(
+                {"detail": "You do not have permission to manage access for this folder."},
+                status=status.HTTP_403_FORBIDDEN
+            )
         user_id = request.data.get('user_id')
         is_granted = request.data.get('is_granted', True)
         

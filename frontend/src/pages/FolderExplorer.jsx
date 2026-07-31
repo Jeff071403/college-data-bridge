@@ -23,6 +23,7 @@ import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
 import GroupAddIcon from '@mui/icons-material/GroupAdd';
 import SearchOffIcon from '@mui/icons-material/SearchOff';
 import GetAppIcon from '@mui/icons-material/GetApp';
+import ShareIcon from '@mui/icons-material/Share';
 import EditIcon from '@mui/icons-material/Edit';
 import SecurityIcon from '@mui/icons-material/Security';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -776,6 +777,17 @@ const FolderExplorer = () => {
       {/* Action Buttons Row */}
       {!isFilteredView && (
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1.5, mb: 3 }}>
+          {!searchParamQuery && currentFolder && (hasPermission('manage_users') || currentFolder.created_by?.id === user?.id) && (
+            <Button
+              variant="outlined"
+              color="primary"
+              startIcon={<ShareIcon />}
+              onClick={() => triggerAccess(currentFolder)}
+              sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700 }}
+            >
+              Share Folder
+            </Button>
+          )}
           {!searchParamQuery && (
             <Button
               variant="outlined"
@@ -1779,7 +1791,7 @@ const FolderExplorer = () => {
                 Rename Folder
               </MenuItem>
             )}
-            {hasPermission('manage_users') && (
+            {(hasPermission('manage_users') || activeItem?.data?.created_by?.id === user?.id) && (
               <MenuItem onClick={() => { triggerAccess(activeItem.data); handleMenuClose(); }}>
                 <ListItemIcon><GroupAddIcon fontSize="small" /></ListItemIcon>
                 Share Settings
