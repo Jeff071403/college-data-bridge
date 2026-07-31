@@ -72,6 +72,14 @@ def get_service_account_info():
 
 def get_root_folder_id():
     """Gets the active Google Drive root folder ID."""
+    try:
+        from users.models import GoogleDriveSetting
+        active_setting = GoogleDriveSetting.objects.filter(is_active=True).first()
+        if active_setting and active_setting.refresh_token:
+            return active_setting.root_folder_id or 'root'
+    except Exception as e:
+        logger.error(f"Error getting active settings root folder ID: {e}")
+
     info = get_service_account_info()
     return info.get('root_folder_id') or getattr(settings, 'GOOGLE_DRIVE_ROOT_FOLDER_ID', None)
 
