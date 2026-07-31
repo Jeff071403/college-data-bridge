@@ -312,3 +312,24 @@ class TemplateDocument(models.Model):
         return f"{self.document_name} - v{self.version}"
 
 
+class MOUCategory(models.Model):
+    CATEGORY_TYPES = [
+        ('Department', 'College Department'),
+        ('Company', 'Company Name'),
+    ]
+
+    name = models.CharField(max_length=255, unique=True)
+    code = models.CharField(max_length=50, blank=True, null=True)
+    color = models.CharField(max_length=50, default='#3B82F6')
+    icon_type = models.CharField(max_length=50, default='school')  # 'school', 'hospital', 'business', 'palette', 'science', 'gavel'
+    coordinator_name = models.CharField(max_length=255, blank=True, null=True)
+    coordinator_email = models.EmailField(blank=True, null=True)
+    category_type = models.CharField(max_length=50, choices=CATEGORY_TYPES, default='Department')
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.code})"
+
+
+

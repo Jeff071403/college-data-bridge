@@ -59,8 +59,11 @@ class DocumentManagementSystemTests(TestCase):
         return response.data['access']
 
     def test_jwt_login_success(self):
+        self.assertIsNone(self.normal_user.last_login)
         token = self.get_jwt_token("user@test.edu", "password123")
         self.assertIsNotNone(token)
+        self.normal_user.refresh_from_db()
+        self.assertIsNotNone(self.normal_user.last_login)
 
     def test_jwt_login_failed_with_disabled_user(self):
         self.normal_user.status = 'Disabled'
@@ -403,4 +406,222 @@ class DocumentManagementSystemTests(TestCase):
         s2.refresh_from_db()
         self.assertFalse(s1.is_active)
         self.assertTrue(s2.is_active)
+
+
+from unittest.mock import patch
+
+class GoogleDriveOAuthTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.super_admin_role = Role.objects.create(name="Super Admin", description="Super Admin")
+        self.admin_role = Role.objects.create(name="Admin", description="Admin")
+        self.user_role = Role.objects.create(name="User", description="User")
+
+        self.super_admin = User.objects.create_user(
+            email="superadmin@test.edu", password="password123", name="Super Admin", role=self.super_admin_role
+        )
+        self.admin_user = User.objects.create_user(
+            email="admin@test.edu", password="password123", name="Admin User", role=self.admin_role
+        )
+        self.normal_user = User.objects.create_user(
+            email="user@test.edu", password="password123", name="Normal User", role=self.user_role
+        )
+
+    def get_jwt_token(self, email, password):
+        response = self.client.post('/api/users/auth/login/', {'email': email, 'password': password})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        return response.data['access']
+
+    def test_oauth_url_retrieval_success(self):
+        token = self.get_jwt_token("admin@test.edu", "password123")
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + token)
+
+        with self.settings(GOOGLE_DRIVE_CLIENT_ID="mock_client_id"):
+            response = self.client.get('/api/users/google-drive-settings/oauth-url/?redirect_uri=http://localhost:5173/settings')
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertIn("mock_client_id", response.data['url'])
+            self.assertIn("response_type=code", response.data['url'])
+
+    def test_oauth_url_blocked_for_normal_user(self):
+        token = self.get_jwt_token("user@test.edu", "password123")
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + token)
+
+        response = self.client.get('/api/users/google-drive-settings/oauth-url/?redirect_uri=http://localhost:5173/settings')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    @patch('requests.post')
+    @patch('requests.get')
+    def test_oauth_callback_success(self, mock_get, mock_post):
+        class MockResponse:
+            def __init__(self, json_data, status_code):
+                self.json_data = json_data
+                self.status_code = status_code
+
+            def json(self):
+                return self.json_data
+
+            @property
+            def text(self):
+                return str(self.json_data)
+
+        mock_post.return_value = MockResponse({
+            'access_token': 'mock_access',
+            'refresh_token': 'mock_refresh',
+            'expires_in': 3600
+        }, 200)
+
+        def side_effect(url, *args, **kwargs):
+            if 'userinfo' in url:
+                return MockResponse({'email': 'connected@gmail.com'}, 200)
+            elif 'about' in url:
+                return MockResponse({'storageQuota': {'usage': '2000000', 'limit': '15000000'}}, 200)
+            return MockResponse({}, 404)
+
+        mock_get.side_effect = side_effect
+
+        token = self.get_jwt_token("admin@test.edu", "password123")
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + token)
+
+        with self.settings(GOOGLE_DRIVE_CLIENT_ID="mock_client_id", GOOGLE_DRIVE_CLIENT_SECRET="mock_secret"):
+            response = self.client.post('/api/users/google-drive-settings/oauth-callback/', {
+                'code': 'mock_code',
+                'redirect_uri': 'http://localhost:5173/settings'
+            })
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertEqual(response.data['connected_email'], 'connected@gmail.com')
+            self.assertEqual(response.data['storage_usage'], 2000000)
+
+            from users.models import GoogleDriveSetting
+            setting = GoogleDriveSetting.objects.filter(is_active=True).first()
+            self.assertIsNotNone(setting)
+            self.assertEqual(setting.access_token, 'mock_access')
+            self.assertEqual(setting.refresh_token, 'mock_refresh')
+            self.assertEqual(setting.connected_email, 'connected@gmail.com')
+
+
+class WebOAuthIntegrationTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.super_admin_role = Role.objects.create(name="Super Admin", description="Super Admin")
+        self.admin_role = Role.objects.create(name="Admin", description="Admin")
+        self.user_role = Role.objects.create(name="User", description="User")
+
+        self.super_admin = User.objects.create_user(
+            email="superadmin@test.edu", password="password123", name="Super Admin", role=self.super_admin_role
+        )
+        self.admin_user = User.objects.create_user(
+            email="admin@test.edu", password="password123", name="Admin User", role=self.admin_role
+        )
+        self.normal_user = User.objects.create_user(
+            email="user@test.edu", password="password123", name="Normal User", role=self.user_role
+        )
+
+    def get_jwt_token(self, email, password):
+        response = self.client.post('/api/users/auth/login/', {'email': email, 'password': password})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        return response.data['access']
+
+    def test_oauth_url_retrieval_success(self):
+        token = self.get_jwt_token("admin@test.edu", "password123")
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + token)
+
+        with self.settings(GOOGLE_OAUTH_CLIENT_ID="mock_oauth_client_id", GOOGLE_OAUTH_REDIRECT_URI="http://localhost:8000/api/google-drive/oauth/callback/"):
+            response = self.client.get('/api/google-drive/oauth-url/?force_select=true')
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertIn("mock_oauth_client_id", response.data['url'])
+            self.assertIn("prompt=consent+select_account", response.data['url'])
+            self.assertIn("http%3A%2F%2Flocalhost%3A8000%2Fapi%2Fgoogle-drive%2Foauth%2Fcallback%2F", response.data['url'])
+
+    def test_oauth_url_blocked_for_normal_user(self):
+        token = self.get_jwt_token("user@test.edu", "password123")
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + token)
+
+        response = self.client.get('/api/google-drive/oauth-url/')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    @patch('requests.post')
+    @patch('requests.get')
+    def test_oauth_callback_success(self, mock_get, mock_post):
+        class MockResponse:
+            def __init__(self, json_data, status_code):
+                self.json_data = json_data
+                self.status_code = status_code
+
+            def json(self):
+                return self.json_data
+
+            @property
+            def text(self):
+                return str(self.json_data)
+
+        mock_post.return_value = MockResponse({
+            'access_token': 'mock_access',
+            'refresh_token': 'mock_refresh',
+            'expires_in': 3600
+        }, 200)
+
+        def side_effect(url, *args, **kwargs):
+            if 'userinfo' in url:
+                return MockResponse({'email': 'connected_email@gmail.com'}, 200)
+            elif 'about' in url:
+                return MockResponse({'storageQuota': {'usage': '12930000000', 'limit': '5000000000000'}}, 200)
+            return MockResponse({}, 404)
+
+        mock_get.side_effect = side_effect
+
+        with self.settings(GOOGLE_OAUTH_CLIENT_ID="mock_client_id", GOOGLE_OAUTH_CLIENT_SECRET="mock_secret", GOOGLE_OAUTH_REDIRECT_URI="http://localhost:8000/api/google-drive/oauth/callback/"):
+            response = self.client.get('/api/google-drive/oauth/callback/?code=mock_code')
+            # The callback must return a 302 Found redirect to React settings page
+            self.assertEqual(response.status_code, status.HTTP_302_FOUND)
+            self.assertIn("http://localhost:5173/settings?drive=connected", response.url)
+
+            from users.models import GoogleDriveSetting
+            setting = GoogleDriveSetting.objects.filter(is_active=True).first()
+            self.assertIsNotNone(setting)
+            self.assertEqual(setting.access_token, 'mock_access')
+            self.assertEqual(setting.refresh_token, 'mock_refresh')
+            self.assertEqual(setting.connected_email, 'connected_email@gmail.com')
+            self.assertEqual(setting.connection_status, 'Connected')
+            self.assertTrue(setting.oauth_connected)
+
+    def test_status_retrieval(self):
+        token = self.get_jwt_token("admin@test.edu", "password123")
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + token)
+
+        from users.models import GoogleDriveSetting
+        GoogleDriveSetting.objects.create(
+            connected_email="jeffersonsamuel003@gmail.com",
+            connection_status="Connected",
+            oauth_connected=True,
+            storage_limit=5000000000000,
+            storage_usage=12930000000,
+            root_folder_id="Default",
+            default_upload_folder="Root Repository",
+            is_active=True
+        )
+
+        response = self.client.get('/api/google-drive/status/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['connection_status'], 'Connected')
+        self.assertEqual(response.data['connected_email'], 'jeffersonsamuel003@gmail.com')
+        self.assertEqual(response.data['storage_limit'], 5000000000000)
+
+    def test_disconnect(self):
+        token = self.get_jwt_token("admin@test.edu", "password123")
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + token)
+
+        from users.models import GoogleDriveSetting
+        setting = GoogleDriveSetting.objects.create(
+            connected_email="jeffersonsamuel003@gmail.com",
+            connection_status="Connected",
+            oauth_connected=True,
+            is_active=True
+        )
+
+        response = self.client.post('/api/google-drive/disconnect/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        setting.refresh_from_db()
+        self.assertFalse(setting.oauth_connected)
+        self.assertEqual(setting.connection_status, 'Disconnected')
 

@@ -17,7 +17,7 @@ def seed_data():
     # Seeding Master Data Tables
     from mous.models import (
         TemplateCategory, OrganizationType, CollaborationType, DocumentType, Tag,
-        DepartmentCategory, Department
+        DepartmentCategory, Department, MOUCategory
     )
 
     # 1. Seed Template Categories
@@ -96,6 +96,21 @@ def seed_data():
             else:
                 full_name = dname
             Department.objects.get_or_create(name=full_name, category=cat)
+
+    # 6.5. Seed default MOU Categories
+    default_cats = [
+        { "name": 'Engineering & CSE', "code": 'ENG', "color": '#3B82F6', "icon_type": 'school', "coordinator_name": 'Dr. Robert Smith', "coordinator_email": 'eng.mou@college.edu', "category_type": 'Department' },
+        { "name": 'Medical & Health Sciences', "code": 'MED', "color": '#14B8A6', "icon_type": 'hospital', "coordinator_name": 'Dr. Elena Vance', "coordinator_email": 'med.mou@college.edu', "category_type": 'Department' },
+        { "name": 'Commerce & Business Studies', "code": 'COM', "color": '#F59E0B', "icon_type": 'business', "coordinator_name": 'Prof. Marcus Vance', "coordinator_email": 'com.mou@college.edu', "category_type": 'Department' },
+        { "name": 'Arts & Humanities', "code": 'ART', "color": '#EC4899', "icon_type": 'palette', "coordinator_name": 'Dr. Clara Oswald', "coordinator_email": 'arts.mou@college.edu', "category_type": 'Department' },
+        { "name": 'Science & Technology', "code": 'SCI', "color": '#8B5CF6', "icon_type": 'science', "coordinator_name": 'Dr. Alan Grant', "coordinator_email": 'sci.mou@college.edu', "category_type": 'Department' },
+        { "name": 'School of Law & Policy', "code": 'LAW', "color": '#F97316', "icon_type": 'gavel', "coordinator_name": 'Prof. Harvey Specter', "coordinator_email": 'law.mou@college.edu', "category_type": 'Department' },
+    ]
+    for cat in default_cats:
+        MOUCategory.objects.get_or_create(
+            name=cat["name"],
+            defaults=cat
+        )
 
     # 1. Define Permissions
     permissions_list = [

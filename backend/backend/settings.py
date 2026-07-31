@@ -52,6 +52,7 @@ GOOGLE_DRIVE_PRIVATE_KEY_ID = env('GOOGLE_DRIVE_PRIVATE_KEY_ID', default='')
 GOOGLE_DRIVE_PRIVATE_KEY = env('GOOGLE_DRIVE_PRIVATE_KEY', default='')
 GOOGLE_DRIVE_CLIENT_EMAIL = env('GOOGLE_DRIVE_CLIENT_EMAIL', default='')
 GOOGLE_DRIVE_CLIENT_ID = env('GOOGLE_DRIVE_CLIENT_ID', default='')
+GOOGLE_DRIVE_CLIENT_SECRET = env('GOOGLE_DRIVE_CLIENT_SECRET', default='')
 GOOGLE_DRIVE_AUTH_URI = env('GOOGLE_DRIVE_AUTH_URI', default='https://accounts.google.com/o/oauth2/auth')
 GOOGLE_DRIVE_TOKEN_URI = env('GOOGLE_DRIVE_TOKEN_URI', default='https://oauth2.googleapis.com/token')
 GOOGLE_DRIVE_AUTH_PROVIDER_CERT_URL = env('GOOGLE_DRIVE_AUTH_PROVIDER_CERT_URL', default='https://www.googleapis.com/oauth2/v1/certs')
@@ -59,6 +60,11 @@ GOOGLE_DRIVE_CLIENT_CERT_URL = env('GOOGLE_DRIVE_CLIENT_CERT_URL', default='')
 GOOGLE_DRIVE_UNIVERSE_DOMAIN = env('GOOGLE_DRIVE_UNIVERSE_DOMAIN', default='googleapis.com')
 GOOGLE_SERVICE_ACCOUNT_FILE = os.path.join(BASE_DIR, env('GOOGLE_SERVICE_ACCOUNT_FILE', default='credentials/google-drive.json'))
 GOOGLE_DRIVE_ROOT_FOLDER_ID = env('GOOGLE_DRIVE_ROOT_FOLDER_ID', default='')
+
+# Google OAuth 2.0 Web flow Configuration
+GOOGLE_OAUTH_CLIENT_ID = env('GOOGLE_OAUTH_CLIENT_ID', default=GOOGLE_DRIVE_CLIENT_ID)
+GOOGLE_OAUTH_CLIENT_SECRET = env('GOOGLE_OAUTH_CLIENT_SECRET', default=GOOGLE_DRIVE_CLIENT_SECRET)
+GOOGLE_OAUTH_REDIRECT_URI = env('GOOGLE_OAUTH_REDIRECT_URI', default='http://localhost:8000/api/google-drive/oauth/callback/')
 
 # Upload & File Constraints
 MAX_UPLOAD_SIZE = env.int('MAX_UPLOAD_SIZE', default=52428800)

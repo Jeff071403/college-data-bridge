@@ -6,13 +6,14 @@ import {
   Tabs, Tab, Slider, IconButton, Dialog, DialogTitle,
   DialogContent, DialogActions, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Paper, CircularProgress,
-  Tooltip, Badge, InputAdornment
+  Tooltip, Badge, InputAdornment, LinearProgress
 } from '@mui/material';
 import SettingsIcon from '@mui/icons-material/Settings';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import StorageIcon from '@mui/icons-material/Storage';
 import PaletteIcon from '@mui/icons-material/Palette';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -33,6 +34,7 @@ import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import GoogleDriveSettingsTab from '../components/GoogleDriveSettingsTab';
 import {
   getMasterDeptCategories, createMasterDeptCategory, updateMasterDeptCategory, deleteMasterDeptCategory,
   getMasterDepartments, createMasterDepartment, updateMasterDepartment, deleteMasterDepartment,
@@ -865,407 +867,7 @@ const EmailSettingsTab = () => {
 };
 
 
-// ── Google Drive Settings Component for Super Admin ───────────────────────────
-const GoogleDriveSettingsTab = () => {
-  const [driveList, setDriveList] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
-
-  // Dialog states
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [testDialogOpen, setTestDialogOpen] = useState(false);
-
-  // Form states
-  const [editingId, setEditingId] = useState(null);
-  const [projectId, setProjectId] = useState('');
-  const [privateKeyId, setPrivateKeyId] = useState('');
-  const [privateKey, setPrivateKey] = useState('');
-  const [clientEmail, setClientEmail] = useState('');
-  const [clientId, setClientId] = useState('');
-  const [rootFolderId, setRootFolderId] = useState('');
-  const [type, setType] = useState('service_account');
-  const [authUri, setAuthUri] = useState('https://accounts.google.com/o/oauth2/auth');
-  const [tokenUri, setTokenUri] = useState('https://oauth2.googleapis.com/token');
-  const [authProviderCertUrl, setAuthProviderCertUrl] = useState('https://www.googleapis.com/oauth2/v1/certs');
-  const [clientCertUrl, setClientCertUrl] = useState('');
-  const [universeDomain, setUniverseDomain] = useState('googleapis.com');
-
-  // Test connection state
-  const [testingId, setTestingId] = useState(null);
-  const [testingConnection, setTestingConnection] = useState(false);
-  const [showPrivateKey, setShowPrivateKey] = useState(false);
-
-  const fetchSettings = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await api.get('/api/users/google-drive-settings/');
-      setDriveList(response.data);
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to load Google Drive configurations.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchSettings();
-  }, [fetchSettings]);
-
-  const handleOpenAdd = () => {
-    setEditingId(null);
-    setProjectId('');
-    setPrivateKeyId('');
-    setPrivateKey('');
-    setClientEmail('');
-    setClientId('');
-    setRootFolderId('');
-    setType('service_account');
-    setAuthUri('https://accounts.google.com/o/oauth2/auth');
-    setTokenUri('https://oauth2.googleapis.com/token');
-    setAuthProviderCertUrl('https://www.googleapis.com/oauth2/v1/certs');
-    setClientCertUrl('');
-    setUniverseDomain('googleapis.com');
-    setShowPrivateKey(false);
-    setDialogOpen(true);
-  };
-
-  const handleOpenEdit = (drive) => {
-    setEditingId(drive.id);
-    setProjectId(drive.project_id);
-    setPrivateKeyId(drive.private_key_id);
-    setPrivateKey('');
-    setClientEmail(drive.client_email);
-    setClientId(drive.client_id);
-    setRootFolderId(drive.root_folder_id);
-    setType(drive.type);
-    setAuthUri(drive.auth_uri);
-    setTokenUri(drive.token_uri);
-    setAuthProviderCertUrl(drive.auth_provider_x509_cert_url);
-    setClientCertUrl(drive.client_x509_cert_url || '');
-    setUniverseDomain(drive.universe_domain || 'googleapis.com');
-    setShowPrivateKey(false);
-    setDialogOpen(true);
-  };
-
-  const handleSave = async () => {
-    if (!projectId || !privateKeyId || (!editingId && !privateKey) || !clientEmail || !clientId || !rootFolderId) {
-      setError('Please fill in all required configuration fields.');
-      return;
-    }
-    setError(null);
-    setSuccess(null);
-    const payload = {
-      project_id: projectId.trim(),
-      private_key_id: privateKeyId.trim(),
-      client_email: clientEmail.trim(),
-      client_id: clientId.trim(),
-      root_folder_id: rootFolderId.trim(),
-      type,
-      auth_uri: authUri,
-      token_uri: tokenUri,
-      auth_provider_x509_cert_url: authProviderCertUrl,
-      client_x509_cert_url: clientCertUrl.trim() || null,
-      universe_domain: universeDomain,
-    };
-    if (privateKey) {
-      payload.private_key = privateKey;
-    }
-
-    try {
-      if (editingId) {
-        await api.put(`/api/users/google-drive-settings/${editingId}/`, payload);
-        setSuccess('Google Drive configuration updated successfully.');
-      } else {
-        await api.post('/api/users/google-drive-settings/', { ...payload, is_active: driveList.length === 0 });
-        setSuccess('Google Drive configuration created successfully.');
-      }
-      setDialogOpen(false);
-      fetchSettings();
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to save Google Drive configuration.');
-    }
-  };
-
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this configuration?')) return;
-    setError(null);
-    setSuccess(null);
-    try {
-      await api.delete(`/api/users/google-drive-settings/${id}/`);
-      setSuccess('Google Drive configuration deleted successfully.');
-      fetchSettings();
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to delete Google Drive configuration.');
-    }
-  };
-
-  const handleToggleActive = async (drive) => {
-    setError(null);
-    setSuccess(null);
-    try {
-      await api.patch(`/api/users/google-drive-settings/${drive.id}/`, { is_active: !drive.is_active });
-      setSuccess(drive.is_active ? 'Google Drive configuration deactivated.' : 'Google Drive configuration activated successfully.');
-      fetchSettings();
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to toggle activation.');
-    }
-  };
-
-  const handleOpenTest = (id) => {
-    setTestingId(id);
-    setTestDialogOpen(true);
-  };
-
-  const handleTestConnection = async () => {
-    setTestingConnection(true);
-    setError(null);
-    setSuccess(null);
-    try {
-      const response = await api.post(`/api/users/google-drive-settings/${testingId}/test-connection/`);
-      setSuccess(response.data.detail || 'Google Drive connection test succeeded.');
-      setTestDialogOpen(false);
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Google Drive connection test failed.');
-    } finally {
-      setTestingConnection(false);
-    }
-  };
-
-  return (
-    <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Box>
-          <Typography variant="h6" sx={{ fontWeight: 800 }}>Dynamic Google Drive Settings</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Configure custom Google Drive Service Account credentials. Active configurations will override standard env settings.
-          </Typography>
-        </Box>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={handleOpenAdd}
-          sx={{ borderRadius: '12px', fontWeight: 700, background: 'linear-gradient(135deg, var(--indigo), var(--violet))' }}
-        >
-          Add Drive Config
-        </Button>
-      </Box>
-
-      {error && <Alert severity="error" sx={{ mb: 3, borderRadius: '12px' }}>{error}</Alert>}
-      {success && <Alert severity="success" sx={{ mb: 3, borderRadius: '12px' }}>{success}</Alert>}
-
-      {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
-          <CircularProgress />
-        </Box>
-      ) : driveList.length === 0 ? (
-        <Paper sx={{ p: 4, textAlign: 'center', borderRadius: '16px', bgcolor: 'action.hover', border: '1px dashed', borderColor: 'divider', mb: 4 }}>
-          <StorageIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1.5 }} />
-          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>No Custom Google Drive Configs</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Currently using default environment-configured service account credentials.
-          </Typography>
-          <Button variant="outlined" startIcon={<AddIcon />} onClick={handleOpenAdd} sx={{ borderRadius: '10px' }}>
-            Configure New Drive API
-          </Button>
-        </Paper>
-      ) : (
-        <TableContainer component={Paper} sx={{ borderRadius: '16px', border: '1px solid', borderColor: 'divider', boxShadow: 'none', mb: 4 }}>
-          <Table>
-            <TableHead sx={{ bgcolor: 'action.hover' }}>
-              <TableRow>
-                <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
-                <TableCell sx={{ fontWeight: 700 }}>Project ID</TableCell>
-                <TableCell sx={{ fontWeight: 700 }}>Client Email</TableCell>
-                <TableCell sx={{ fontWeight: 700 }}>Root Folder ID</TableCell>
-                <TableCell align="right" sx={{ fontWeight: 700 }}>Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {driveList.map((drive) => (
-                <TableRow key={drive.id} hover>
-                  <TableCell>
-                    <Chip
-                      label={drive.is_active ? 'Active' : 'Inactive'}
-                      color={drive.is_active ? 'success' : 'default'}
-                      size="small"
-                      sx={{ fontWeight: 700, borderRadius: '8px' }}
-                    />
-                  </TableCell>
-                  <TableCell>{drive.project_id}</TableCell>
-                  <TableCell>{drive.client_email}</TableCell>
-                  <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{drive.root_folder_id}</TableCell>
-                  <TableCell align="right">
-                    <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
-                      <Button
-                        size="small"
-                        variant={drive.is_active ? 'outlined' : 'contained'}
-                        color={drive.is_active ? 'warning' : 'primary'}
-                        onClick={() => handleToggleActive(drive)}
-                        sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 700 }}
-                      >
-                        {drive.is_active ? 'Deactivate' : 'Activate'}
-                      </Button>
-                      <IconButton size="small" color="primary" onClick={() => handleOpenEdit(drive)}>
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton size="small" color="info" onClick={() => handleOpenTest(drive.id)}>
-                        <SendIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton size="small" color="error" onClick={() => handleDelete(drive.id)}>
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Box>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      )}
-
-      {/* Guidelines Section */}
-      <Card sx={{ borderRadius: '16px', border: '1px solid', borderColor: 'divider', boxShadow: 'none', bgcolor: 'action.hover', p: 3.5 }}>
-        <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
-          <SettingsSuggestIcon color="primary" /> Google Drive Service Account Configuration Guide
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2, lineHeight: 1.6 }}>
-          MCC Legal Document Registry uses a Google Cloud service account with API credentials to securely synchronize folders and files with Google Drive. Follow these steps to generate and connect a service account:
-        </Typography>
-        <Box component="ol" sx={{ pl: 2.5, m: 0, '& li': { mb: 1.5, fontSize: '0.82rem', lineHeight: 1.6, color: 'text.secondary' } }}>
-          <li>
-            <strong>Access Google Cloud Console:</strong> Sign in to the <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer" style={{ fontWeight: 700, color: 'var(--indigo)' }}>Google Cloud Console</a> using your administrator credentials.
-          </li>
-          <li>
-            <strong>Create or Select a GCP Project:</strong> Click the project selector drop-down and choose your existing project or click "New Project" to create a dedicated one.
-          </li>
-          <li>
-            <strong>Enable Google Drive API:</strong> Navigate to the APIs Library, search for <em>"Google Drive API"</em>, click it, and click <strong>Enable</strong>.
-          </li>
-          <li>
-            <strong>Generate Service Account:</strong> Go to <strong>IAM &amp; Admin</strong> &gt; <strong>Service Accounts</strong>. Click <strong>+ Create Service Account</strong>. Give it a name (e.g. <code>mcc-drive-sync</code>), describe it, and click Create.
-          </li>
-          <li>
-            <strong>Download Credentials JSON Key:</strong> Select the created Service Account, open the <strong>Keys</strong> tab, click <strong>Add Key</strong> &gt; <strong>Create New Key</strong>, choose <strong>JSON</strong>, and download the key file securely to your local machine.
-          </li>
-          <li>
-            <strong>Configure Folder &amp; Share Permissions:</strong> Open <a href="https://drive.google.com/" target="_blank" rel="noopener noreferrer" style={{ fontWeight: 700, color: 'var(--indigo)' }}>Google Drive</a>, select or create your root folder (e.g. <code>MOU Repository</code>), right-click and choose <strong>Share</strong>. Copy the <code>client_email</code> address from your downloaded JSON file, paste it as a new recipient, assign the role <strong>Editor</strong> or <strong>Organizer</strong>, and click Send.
-          </li>
-          <li>
-            <strong>Enter Settings Above:</strong> Add a new configuration above, open your downloaded JSON key file, and copy-paste the corresponding parameters directly into the form fields.
-          </li>
-        </Box>
-      </Card>
-
-      {/* Add / Edit Dialog */}
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
-        <DialogTitle sx={{ fontWeight: 800 }}>
-          {editingId ? 'Edit Google Drive Config' : 'Add Google Drive Config'}
-        </DialogTitle>
-        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, pt: 1.5 }}>
-          <Box sx={{ display: 'flex', gap: 2 }}>
-            <TextField
-              sx={{ flex: 1 }}
-              label="Project ID"
-              required
-              value={projectId}
-              onChange={e => setProjectId(e.target.value)}
-              placeholder="e.g. mcc-drive-sync"
-            />
-            <TextField
-              sx={{ flex: 1 }}
-              label="Private Key ID"
-              required
-              value={privateKeyId}
-              onChange={e => setPrivateKeyId(e.target.value)}
-            />
-          </Box>
-
-          <TextField
-            fullWidth
-            label="Client Email"
-            required
-            type="email"
-            value={clientEmail}
-            onChange={e => setClientEmail(e.target.value)}
-            placeholder="e.g. mcc-sync@project-id.iam.gserviceaccount.com"
-          />
-
-          <TextField
-            fullWidth
-            label="Client ID"
-            required
-            value={clientId}
-            onChange={e => setClientId(e.target.value)}
-          />
-
-          <TextField
-            fullWidth
-            label="Google Drive Root Folder ID"
-            required
-            value={rootFolderId}
-            onChange={e => setRootFolderId(e.target.value)}
-            placeholder="e.g. 1SUGWdsJ3JWBT0UYQ7o0iJSfanyXOivXx"
-            helperText="The shared folder's unique ID from the Google Drive URL."
-          />
-
-          <TextField
-            fullWidth
-            multiline
-            rows={4}
-            type={showPrivateKey ? 'text' : 'password'}
-            label="Private Key"
-            required={!editingId}
-            placeholder={editingId ? "••••••••••••••••••••••••" : "-----BEGIN PRIVATE KEY-----\n..."}
-            value={privateKey}
-            onChange={e => setPrivateKey(e.target.value)}
-            InputProps={{
-              endAdornment: (
-                <InputAdornment position="end">
-                  <IconButton
-                    aria-label="toggle key visibility"
-                    onClick={() => setShowPrivateKey(!showPrivateKey)}
-                    edge="end"
-                  >
-                    {showPrivateKey ? <VisibilityOff /> : <Visibility />}
-                  </IconButton>
-                </InputAdornment>
-              )
-            }}
-          />
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button onClick={() => setDialogOpen(false)} sx={{ fontWeight: 700 }}>Cancel</Button>
-          <Button onClick={handleSave} variant="contained" sx={{ borderRadius: '12px', fontWeight: 700, background: 'linear-gradient(135deg, var(--indigo), var(--violet))' }}>
-            Save Settings
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Test Dialog */}
-      <Dialog open={testDialogOpen} onClose={() => setTestDialogOpen(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
-        <DialogTitle sx={{ fontWeight: 800 }}>Test Connection</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" color="text.secondary">
-            Are you sure you want to test the Google Drive integration? The system will authenticate and verify accessibility for the configured root folder.
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button onClick={() => setTestDialogOpen(false)} disabled={testingConnection} sx={{ fontWeight: 700 }}>Cancel</Button>
-          <Button
-            onClick={handleTestConnection}
-            variant="contained"
-            disabled={testingConnection}
-            sx={{ borderRadius: '10px', fontWeight: 700, background: 'linear-gradient(135deg, var(--indigo), var(--violet))' }}
-          >
-            {testingConnection ? 'Testing...' : 'Start Test'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
-  );
-};
+// ── Google Drive Settings Component ───────────────────────────────────────────;
 
 
 // ── Main Settings Component ───────────────────────────────────────────────────
@@ -1385,10 +987,10 @@ const Settings = () => {
             <Tab icon={<SettingsSuggestIcon fontSize="small" />} iconPosition="start" label="Master Data Config" sx={tabSx} />
              <Tab icon={<NotificationsActiveIcon fontSize="small" />} iconPosition="start" label="Notifications" sx={tabSx} />
             <Tab icon={<StorageIcon fontSize="small" />} iconPosition="start" label="Storage" sx={tabSx} />
-            {user?.role?.name === 'Super Admin' && (
+            {['Super Admin', 'Admin'].includes(user?.role?.name) && (
               <Tab icon={<MailIcon fontSize="small" />} iconPosition="start" label="Email Settings" sx={tabSx} />
             )}
-            {user?.role?.name === 'Super Admin' && (
+            {['Super Admin', 'Admin'].includes(user?.role?.name) && (
               <Tab icon={<StorageIcon fontSize="small" />} iconPosition="start" label="Google Drive" sx={tabSx} />
             )}
           </Tabs>
@@ -1753,12 +1355,12 @@ const Settings = () => {
               </Grid>
             </Grid>
            </TabPanel>
-          {user?.role?.name === 'Super Admin' && (
+          {['Super Admin', 'Admin'].includes(user?.role?.name) && (
             <TabPanel value={activeTab} index={4}>
               <EmailSettingsTab />
             </TabPanel>
           )}
-          {user?.role?.name === 'Super Admin' && (
+          {['Super Admin', 'Admin'].includes(user?.role?.name) && (
             <TabPanel value={activeTab} index={5}>
               <GoogleDriveSettingsTab />
             </TabPanel>

@@ -7,6 +7,7 @@ from .views import DashboardStatsView, GlobalSearchView
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/users/', include('users.urls')),
+    path('api/google-drive/', include('users.urls_google_drive')),
     path('api/roles/', include('roles.urls')),
     path('api/permissions/', include('permissions.urls')),
     path('api/folders/', include('folders.urls')),

@@ -784,12 +784,12 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from .models import (
     TemplateCategory, OrganizationType, CollaborationType, DocumentType, Tag,
-    DepartmentCategory, Department, TemplateCollection, TemplateDocument
+    DepartmentCategory, Department, TemplateCollection, TemplateDocument, MOUCategory
 )
 from .serializers import (
     TemplateCategorySerializer, OrganizationTypeSerializer, CollaborationTypeSerializer,
     DocumentTypeSerializer, TagSerializer, DepartmentCategorySerializer, DepartmentSerializer,
-    TemplateCollectionSerializer, TemplateDocumentSerializer
+    TemplateCollectionSerializer, TemplateDocumentSerializer, MOUCategorySerializer
 )
 
 class MasterDataMixin:
@@ -871,6 +871,37 @@ class DepartmentViewSet(MasterDataMixin, viewsets.ModelViewSet):
         if category_id:
             qs = qs.filter(category_id=category_id)
         return qs
+
+
+class MOUCategoryViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    queryset = MOUCategory.objects.all().order_by('name')
+    serializer_class = MOUCategorySerializer
+
+    def perform_create(self, serializer):
+        category = serializer.save()
+        # Automatically create a root folder for this category
+        from folders.models import Folder
+        from services import drive_service
+        import logging
+        logger = logging.getLogger(__name__)
+
+        # Check if a folder already exists with this name at root
+        folder, created = Folder.objects.get_or_create(
+            name=category.name,
+            parent=None,
+            defaults={'created_by': self.request.user}
+        )
+        if created:
+            try:
+                # Trigger Google Drive folder creation
+                google_id = drive_service.create_folder(folder.name, None)
+                folder.google_folder_id = google_id
+                folder.save(update_fields=['google_folder_id'])
+            except Exception as e:
+                logger.warning(f"Google Drive folder creation skipped for '{folder.name}': {e}")
+
+
 
 class TemplateCollectionViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
@@ -1073,6 +1104,76 @@ class TemplateDocumentViewSet(viewsets.ModelViewSet):
         log_activity(request.user, f"Downloaded template document '{doc.document_name}' v{doc.version}", module="Templates")
         return Response({"detail": "Download logged."})
 
+    @action(detail=True, methods=['post'], url_path='send-email')
+    def send_email(self, request, pk=None):
+        doc = self.get_object()
+        recipient_email = request.data.get('recipient_email')
+        subject = request.data.get('subject') or f"Attached Document: {doc.document_name}"
+        body = request.data.get('body') or f"Please find the attached document: {doc.document_name}."
+
+        if not recipient_email:
+            return Response({"detail": "recipient_email is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 1. Retrieve the file bytes
+        import os
+        from django.core.mail import EmailMultiAlternatives
+        from users.models import SMTPSetting
+        from django.core.mail import get_connection
+        from django.conf import settings
+
+        file_bytes = None
+        if doc.file_path and os.path.exists(doc.file_path.path):
+            try:
+                with open(doc.file_path.path, 'rb') as f:
+                    file_bytes = f.read()
+            except Exception as read_err:
+                logger.warning(f"Failed to read local file: {read_err}")
+                
+        if not file_bytes and doc.google_file_id and not doc.google_file_id.startswith('drive_file_'):
+            try:
+                from services import drive_service
+                file_bytes = drive_service.download_file(doc.google_file_id)
+            except Exception as e:
+                return Response({"detail": f"Failed to download template from Google Drive: {str(e)}"}, status=500)
+
+        if not file_bytes:
+            return Response({"detail": "Document PDF file not found or empty."}, status=status.HTTP_404_NOT_FOUND)
+
+        # 2. Setup SMTP setting
+        smtp_setting = SMTPSetting.objects.filter(is_active=True).first()
+        connection = None
+        from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'no-reply@mcc.edu')
+
+        if smtp_setting:
+            connection = get_connection(
+                backend='django.core.mail.backends.smtp.EmailBackend',
+                host=smtp_setting.host,
+                port=smtp_setting.port,
+                username=smtp_setting.username if smtp_setting.auth_required else None,
+                password=smtp_setting.password if smtp_setting.auth_required else None,
+                use_tls=smtp_setting.use_tls,
+                use_ssl=smtp_setting.use_ssl,
+            )
+            from_email = f"MCC LEGAL DOCUMENT <{smtp_setting.sender_email}>"
+
+        try:
+            msg = EmailMultiAlternatives(
+                subject=subject,
+                body=body,
+                from_email=from_email,
+                to=[recipient_email],
+                connection=connection
+            )
+            # Attach PDF
+            msg.attach(f"{doc.document_name}.pdf", file_bytes, "application/pdf")
+            msg.send()
+            
+            # Log activity
+            log_activity(request.user, f"Emailed template document '{doc.document_name}' to {recipient_email}", module="Templates")
+            return Response({"detail": f"Email sent successfully to {recipient_email}."})
+        except Exception as e:
+            return Response({"detail": f"Failed to send email: {str(e)}"}, status=500)
+
     @action(detail=True, methods=['post'], url_path='archive')
     def archive(self, request, pk=None):
         doc = self.get_object()
@@ -1080,4 +1181,5 @@ class TemplateDocumentViewSet(viewsets.ModelViewSet):
         doc.save(update_fields=['status'])
         log_activity(request.user, f"Archived template document '{doc.document_name}' v{doc.version}", module="Templates")
         return Response(TemplateDocumentSerializer(doc).data)
+
 

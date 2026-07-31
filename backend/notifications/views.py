@@ -28,3 +28,10 @@ class NotificationViewSet(viewsets.ModelViewSet):
         user = request.user
         Notification.objects.filter(user=user, is_read=False).update(is_read=True)
         return Response({"detail": "All notifications marked as read."})
+
+    @action(detail=False, methods=['post'], url_path='clear-all')
+    def clear_all(self, request):
+        user = request.user
+        Notification.objects.filter(user=user).delete()
+        return Response({"detail": "All notifications cleared."})
+

@@ -10,7 +10,7 @@ from .views import (
     MOUSharedDashboardView,
     TemplateCategoryViewSet, OrganizationTypeViewSet, CollaborationTypeViewSet,
     DocumentTypeViewSet, TagViewSet, DepartmentCategoryViewSet, DepartmentViewSet,
-    TemplateCollectionViewSet, TemplateDocumentViewSet
+    TemplateCollectionViewSet, TemplateDocumentViewSet, MOUCategoryViewSet
 )
 
 router = DefaultRouter()
@@ -23,6 +23,7 @@ router.register('master/dept-categories', DepartmentCategoryViewSet, basename='m
 router.register('master/departments', DepartmentViewSet, basename='master-department')
 router.register('collections', TemplateCollectionViewSet, basename='template-collection')
 router.register('documents', TemplateDocumentViewSet, basename='template-document')
+router.register('categories', MOUCategoryViewSet, basename='mou-category')
 
 urlpatterns = [
     path('templates/', MOUTemplateListCreateView.as_view(), name='mou-template-list-create'),

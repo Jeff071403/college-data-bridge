@@ -47,6 +47,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         log_activity(self.user, "User logged in successfully", "authentication")
         
         # Update last login
+        self.user.last_login = timezone.now()
         self.user.save(update_fields=['last_login'])
         
         return data
@@ -473,6 +474,19 @@ class IsSuperAdmin(permissions.BasePermission):
         )
 
 
+class IsAdminOrSuperAdmin(permissions.BasePermission):
+    """
+    Permission class that grants access to Admin and Super Admin users.
+    """
+    def has_permission(self, request, view):
+        return (
+            request.user 
+            and request.user.is_authenticated 
+            and request.user.role 
+            and request.user.role.name in ["Super Admin", "Admin"]
+        )
+
+
 class SMTPSettingViewSet(viewsets.ModelViewSet):
     serializer_class = SMTPSettingSerializer
     permission_classes = [IsSuperAdmin]
@@ -531,55 +545,150 @@ class SMTPSettingViewSet(viewsets.ModelViewSet):
 
 class GoogleDriveSettingViewSet(viewsets.ModelViewSet):
     serializer_class = GoogleDriveSettingSerializer
-    permission_classes = [IsSuperAdmin]
+    permission_classes = [IsAdminOrSuperAdmin]
     queryset = GoogleDriveSetting.objects.all().order_by('-created_at')
+
+    @action(detail=False, methods=['get'], url_path='oauth-url')
+    def oauth_url(self, request):
+        redirect_uri = request.query_params.get('redirect_uri')
+        if not redirect_uri:
+            return Response({"detail": "redirect_uri query parameter is required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        client_id = getattr(settings, 'GOOGLE_DRIVE_CLIENT_ID', '')
+        if not client_id:
+            setting = GoogleDriveSetting.objects.first()
+            if setting:
+                client_id = setting.client_id
+        
+        if not client_id:
+            return Response({"detail": "Google Drive Client ID is not configured on the server"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        import urllib.parse
+        params = {
+            'client_id': client_id,
+            'redirect_uri': redirect_uri,
+            'response_type': 'code',
+            'scope': 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.email openid',
+            'access_type': 'offline',
+            'prompt': 'consent select_account'
+        }
+        url = 'https://accounts.google.com/o/oauth2/auth?' + urllib.parse.urlencode(params)
+        return Response({'url': url})
+
+    @action(detail=False, methods=['post'], url_path='oauth-callback')
+    def oauth_callback(self, request):
+        code = request.data.get('code')
+        redirect_uri = request.data.get('redirect_uri')
+        if not code or not redirect_uri:
+            return Response({"detail": "code and redirect_uri are required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        client_id = getattr(settings, 'GOOGLE_DRIVE_CLIENT_ID', '')
+        client_secret = getattr(settings, 'GOOGLE_DRIVE_CLIENT_SECRET', '')
+        
+        if not client_id or not client_secret:
+            setting = GoogleDriveSetting.objects.first()
+            if setting:
+                client_id = client_id or setting.client_id
+                client_secret = client_secret or setting.client_secret
+        
+        if not client_id or not client_secret:
+            return Response({"detail": "Google Drive OAuth client_id or client_secret is not configured on the server"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        import requests
+        import datetime
+        from django.utils import timezone
+        
+        token_url = 'https://oauth2.googleapis.com/token'
+        payload = {
+            'code': code,
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'redirect_uri': redirect_uri,
+            'grant_type': 'authorization_code'
+        }
+        
+        try:
+            res = requests.post(token_url, data=payload)
+            if res.status_code != 200:
+                return Response({"detail": f"Failed to exchange code: {res.text}"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            tokens = res.json()
+            access_token = tokens.get('access_token')
+            refresh_token = tokens.get('refresh_token')
+            expires_in = tokens.get('expires_in', 3600)
+            expiry_time = timezone.now() + datetime.timedelta(seconds=expires_in)
+            
+            headers = {'Authorization': f'Bearer {access_token}'}
+            userinfo_res = requests.get('https://www.googleapis.com/oauth2/v2/userinfo', headers=headers)
+            connected_email = None
+            if userinfo_res.status_code == 200:
+                connected_email = userinfo_res.json().get('email')
+            
+            storage_usage = 0
+            storage_limit = 0
+            drive_about_res = requests.get('https://www.googleapis.com/drive/v3/about?fields=storageQuota', headers=headers)
+            if drive_about_res.status_code == 200:
+                quota = drive_about_res.json().get('storageQuota', {})
+                storage_usage = int(quota.get('usage', 0))
+                storage_limit = int(quota.get('limit', 0))
+            
+            setting = GoogleDriveSetting.objects.filter(is_active=True).first()
+            if not setting:
+                setting = GoogleDriveSetting.objects.first()
+            if not setting:
+                setting = GoogleDriveSetting()
+            
+            setting.client_id = client_id
+            setting.client_secret = client_secret
+            setting.access_token = access_token
+            if refresh_token:
+                setting.refresh_token = refresh_token
+            setting.token_expiry = expiry_time
+            setting.connected_email = connected_email
+            setting.storage_usage = storage_usage
+            setting.storage_limit = storage_limit
+            setting.is_active = True
+            if not setting.project_id:
+                setting.project_id = 'Web OAuth Project'
+            
+            setting.save()
+            
+            log_activity(request.user, f"Authorized Google Drive Web OAuth for project {setting.project_id}", "drive")
+            return Response({
+                "detail": "OAuth authorization completed successfully",
+                "connected_email": connected_email,
+                "storage_usage": storage_usage,
+                "storage_limit": storage_limit
+            })
+        except Exception as e:
+            logger.error(f"OAuth exchange failed: {e}", exc_info=True)
+            return Response({"detail": f"OAuth authorization failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=True, methods=['post'], url_path='test-connection')
     def test_connection(self, request, pk=None):
         drive_setting = self.get_object()
         
-        from google.oauth2 import service_account
-        from googleapiclient.discovery import build
-        
-        private_key = drive_setting.private_key
-        if private_key:
-            if private_key.startswith('"') and private_key.endswith('"'):
-                private_key = private_key[1:-1]
-            elif private_key.startswith("'") and private_key.endswith("'"):
-                private_key = private_key[1:-1]
-            private_key = private_key.replace('\\n', '\n')
-            
-        info = {
-            "type": drive_setting.type,
-            "project_id": drive_setting.project_id,
-            "private_key_id": drive_setting.private_key_id,
-            "private_key": private_key,
-            "client_email": drive_setting.client_email,
-            "client_id": drive_setting.client_id,
-            "auth_uri": drive_setting.auth_uri,
-            "token_uri": drive_setting.token_uri,
-            "auth_provider_x509_cert_url": drive_setting.auth_provider_x509_cert_url,
-            "client_x509_cert_url": drive_setting.client_x509_cert_url or '',
-            "universe_domain": drive_setting.universe_domain,
-        }
-        
-        SCOPES = ['https://www.googleapis.com/auth/drive']
         try:
-            creds = service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
-            service = build('drive', 'v3', credentials=creds)
-            # Try to list files to verify credentials
-            service.files().list(pageSize=1).execute()
+            from services import drive_service
+            original_active = drive_setting.is_active
+            if not original_active:
+                GoogleDriveSetting.objects.filter(is_active=True).update(is_active=False)
+                drive_setting.is_active = True
+                drive_setting.save()
             
-            # Verify root folder exists/is readable
-            root_id = drive_setting.root_folder_id
-            if root_id:
-                try:
+            try:
+                service = drive_service.authenticate()
+                service.files().list(pageSize=1).execute()
+                
+                root_id = drive_setting.root_folder_id or drive_service.get_root_folder_id()
+                if root_id:
                     service.files().get(fileId=root_id, fields='id').execute()
-                except Exception as folder_err:
-                    return Response(
-                        {"detail": f"Authentication succeeded, but the Root Folder ID was not found or is inaccessible: {str(folder_err)}"},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
+            finally:
+                if not original_active:
+                    drive_setting.is_active = False
+                    drive_setting.save()
+                    # Re-activate the previously active configurations
+                    GoogleDriveSetting.objects.filter(pk=drive_setting.pk).update(is_active=False)
             
             log_activity(request.user, f"Successfully tested Google Drive connection for project {drive_setting.project_id}", "drive")
             return Response({"detail": "Google Drive connection test succeeded! Authentication and folder access verified successfully."})

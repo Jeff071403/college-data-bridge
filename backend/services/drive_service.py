@@ -2,6 +2,8 @@ import io
 import logging
 from django.conf import settings
 from google.oauth2 import service_account
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 from googleapiclient.errors import HttpError
@@ -75,12 +77,61 @@ def get_root_folder_id():
 
 def authenticate():
     """
-    Authenticates with Google Drive using service account credentials.
-    Supports reading credentials directly from environment variables, or fallback to file.
+    Authenticates with Google Drive using either Web OAuth 2.0 credentials
+    or Service Account credentials.
     Returns the Google Drive service object.
     """
     SCOPES = ['https://www.googleapis.com/auth/drive']
     try:
+        from users.models import GoogleDriveSetting
+        active_setting = GoogleDriveSetting.objects.filter(is_active=True).first()
+
+        # Check if we have Web OAuth 2.0 credentials in the active setting
+        if active_setting and active_setting.refresh_token:
+            client_id = active_setting.client_id or getattr(settings, 'GOOGLE_OAUTH_CLIENT_ID', '')
+            client_secret = active_setting.client_secret or getattr(settings, 'GOOGLE_OAUTH_CLIENT_SECRET', '')
+            
+            if not client_id or not client_secret:
+                import os
+                import json
+                cred_path = os.path.join(settings.BASE_DIR, 'credentials.json')
+                if os.path.exists(cred_path):
+                    try:
+                        with open(cred_path, 'r') as f:
+                            data = json.load(f)
+                            web_data = data.get('web', {})
+                            if not client_id:
+                                client_id = web_data.get('client_id', '')
+                            if not client_secret:
+                                client_secret = web_data.get('client_secret', '')
+                    except Exception as e:
+                        logger.error(f"Error reading credentials.json: {e}")
+            
+            creds = Credentials(
+                token=active_setting.access_token,
+                refresh_token=active_setting.refresh_token,
+                token_uri=active_setting.token_uri or 'https://oauth2.googleapis.com/token',
+                client_id=client_id,
+                client_secret=client_secret
+            )
+
+            # Refresh token if expired or invalid
+            if creds.expired or not creds.valid:
+                try:
+                    from django.utils import timezone
+                    creds.refresh(Request())
+                    active_setting.access_token = creds.token
+                    active_setting.token_expiry = creds.expiry
+                    active_setting.connection_status = 'Connected'
+                    active_setting.last_connection_time = timezone.now()
+                    active_setting.save(update_fields=['access_token', 'token_expiry', 'connection_status', 'last_connection_time'])
+                except Exception as refresh_err:
+                    logger.error(f"Failed to refresh Google Drive OAuth token: {refresh_err}")
+                    active_setting.connection_status = 'Refresh Failed'
+                    active_setting.save(update_fields=['connection_status'])
+
+            return build('drive', 'v3', credentials=creds)
+
         info = get_service_account_info()
         if info.get('client_email') and info.get('private_key'):
             creds = service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
@@ -91,7 +142,7 @@ def authenticate():
             creds = service_account.Credentials.from_service_account_file(sa_file, scopes=SCOPES)
             return build('drive', 'v3', credentials=creds)
 
-        raise ValueError("Google Drive service account credentials missing in environment variables.")
+        raise ValueError("Google Drive credentials missing.")
     except Exception as e:
         logger.error(f"Google Drive authentication failed: {e}")
         raise

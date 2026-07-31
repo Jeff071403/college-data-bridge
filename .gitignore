@@ -17,6 +17,13 @@ __pycache__/
 backend/__pycache__/
 backend/*/__pycache__/
 
+# Secrets & credentials — NEVER commit these
+backend/credentials.json
+backend/token.json
+backend/.env
+backend/credentials/
+.env
+
 # Media & Uploads
 backend/media/*
 !backend/media/.gitkeep

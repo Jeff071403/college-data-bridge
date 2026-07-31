@@ -55,6 +55,26 @@ const NotificationsPage = () => {
     }
   };
 
+  const handleDeleteNotification = async (id) => {
+    try {
+      await api.delete(`/api/notifications/${id}/`);
+      fetchNotifications();
+    } catch (err) {
+      console.error('Delete notification failed:', err);
+    }
+  };
+
+  const handleClearAll = async () => {
+    if (window.confirm("Are you sure you want to clear all notifications?")) {
+      try {
+        await api.post('/api/notifications/clear-all/');
+        fetchNotifications();
+      } catch (err) {
+        console.error('Clear all notifications failed:', err);
+      }
+    }
+  };
+
   const filteredNotifications = notifications.filter(n => {
     if (tab === 'unread') return !n.is_read;
     if (tab === 'approvals') return n.title.toLowerCase().includes('approval') || n.title.toLowerCase().includes('verify');
@@ -79,14 +99,25 @@ const NotificationsPage = () => {
           </Box>
         </Box>
 
-        <Button
-          variant="outlined"
-          startIcon={<MarkEmailReadIcon />}
-          onClick={handleMarkAllRead}
-          sx={{ borderRadius: '12px', fontWeight: 700 }}
-        >
-          Mark All as Read
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1.5 }}>
+          <Button
+            variant="outlined"
+            startIcon={<MarkEmailReadIcon />}
+            onClick={handleMarkAllRead}
+            sx={{ borderRadius: '12px', fontWeight: 700 }}
+          >
+            Mark All as Read
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            startIcon={<DeleteIcon />}
+            onClick={handleClearAll}
+            sx={{ borderRadius: '12px', fontWeight: 700 }}
+          >
+            Clear All
+          </Button>
+        </Box>
       </Box>
 
       {/* Tabs */}
@@ -124,11 +155,16 @@ const NotificationsPage = () => {
                       '&:hover': { bgcolor: 'action.hover' }
                     }}
                     secondaryAction={
-                      !n.is_read && (
-                        <Button size="small" onClick={() => handleMarkAsRead(n.id)} sx={{ fontWeight: 700 }}>
-                          Mark Read
-                        </Button>
-                      )
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        {!n.is_read && (
+                          <Button size="small" onClick={() => handleMarkAsRead(n.id)} sx={{ fontWeight: 700 }}>
+                            Mark Read
+                          </Button>
+                        )}
+                        <IconButton size="small" onClick={() => handleDeleteNotification(n.id)} sx={{ color: 'error.main' }}>
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
                     }
                   >
                     <ListItemIcon sx={{ minWidth: 44 }}>

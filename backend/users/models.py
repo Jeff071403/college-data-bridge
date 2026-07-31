@@ -128,13 +128,27 @@ class SMTPSetting(models.Model):
 
 
 class GoogleDriveSetting(models.Model):
-    project_id = models.CharField(max_length=255)
-    private_key_id = models.CharField(max_length=255)
-    private_key = models.TextField()
-    client_email = models.EmailField()
-    client_id = models.CharField(max_length=255)
-    root_folder_id = models.CharField(max_length=255)
+    project_id = models.CharField(max_length=255, blank=True, null=True)
+    private_key_id = models.CharField(max_length=255, blank=True, null=True)
+    private_key = models.TextField(blank=True, null=True)
+    client_email = models.EmailField(blank=True, null=True)
+    client_id = models.CharField(max_length=255, blank=True, null=True)
+    client_secret = models.CharField(max_length=255, blank=True, null=True)
+    root_folder_id = models.CharField(max_length=255, blank=True, null=True)
     
+    # OAuth tokens & credentials
+    access_token = models.TextField(blank=True, null=True)
+    refresh_token = models.TextField(blank=True, null=True)
+    connected_email = models.EmailField(blank=True, null=True)
+    token_expiry = models.DateTimeField(blank=True, null=True)
+    storage_limit = models.BigIntegerField(blank=True, null=True)
+    storage_usage = models.BigIntegerField(blank=True, null=True)
+    token_data = models.TextField(blank=True, null=True)
+    default_upload_folder = models.CharField(max_length=255, blank=True, null=True, default='Root Repository')
+    connection_status = models.CharField(max_length=50, default='Disconnected')
+    oauth_connected = models.BooleanField(default=False)
+    last_connection_time = models.DateTimeField(blank=True, null=True)
+
     # Optional fields for customization
     type = models.CharField(max_length=100, default='service_account')
     auth_uri = models.URLField(default='https://accounts.google.com/o/oauth2/auth')

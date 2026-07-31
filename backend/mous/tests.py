@@ -344,3 +344,33 @@ class CustomTimeMiddlewareTests(APITestCase):
         )
         self.assertTrue(admin_expiry_noti.exists())
 
+
+class MOUCategoryTests(APITestCase):
+    def setUp(self):
+        self.admin_role = Role.objects.create(name='Admin', description='Admin role')
+        self.admin = User.objects.create_user(
+            email='admin@mcc.edu',
+            password='password123',
+            name='Admin User',
+            role=self.admin_role
+        )
+
+    def test_create_category(self):
+        self.client.force_authenticate(user=self.admin)
+        url = reverse('mou-category-list')
+        data = {
+            'name': 'Google Cloud Research Labs',
+            'code': 'GCP',
+            'color': '#8B5CF6',
+            'icon_type': 'company',
+            'coordinator_name': 'Sundar Pichai',
+            'coordinator_email': 'sundar@google.com',
+            'category_type': 'Company'
+        }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['name'], 'Google Cloud Research Labs')
+        self.assertEqual(response.data['code'], 'GCP')
+        self.assertEqual(response.data['category_type'], 'Company')
+
+

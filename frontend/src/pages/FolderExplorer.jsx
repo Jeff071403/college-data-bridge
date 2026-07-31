@@ -27,6 +27,8 @@ import EditIcon from '@mui/icons-material/Edit';
 import SecurityIcon from '@mui/icons-material/Security';
 import DeleteIcon from '@mui/icons-material/Delete';
 import InfoIcon from '@mui/icons-material/Info';
+import CheckIcon from '@mui/icons-material/Check';
+import CloseIcon from '@mui/icons-material/Close';
 
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -69,12 +71,16 @@ const FolderExplorer = () => {
       if (diffDays <= 30) {
         return '#EF4444';
       }
+      // If more than 30 days away, override stale Expired status
+      if (folder.status === 'Expired') {
+        return '#8B5CF6'; // Active (Purple)
+      }
     }
     if (folder.status === 'Signed') {
       return '#10B981';
     }
     if (folder.is_viewed === false) {
-      return '#3B82F6';
+      return '#F59E0B';
     }
     return getFolderStatusColor(folder.status);
   };
@@ -89,12 +95,16 @@ const FolderExplorer = () => {
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       if (diffDays <= 0) return 'Expired';
       if (diffDays <= 30) return 'Expiring Soon';
+      // If more than 30 days away, override stale Expired status
+      if (folder.status === 'Expired') {
+        return 'Active';
+      }
     }
     if (folder.status === 'Signed') {
       return 'Signed';
     }
     if (folder.is_viewed === false) {
-      return 'New';
+      return 'Unread';
     }
     return folder.status || 'Active';
   };
@@ -166,6 +176,10 @@ const FolderExplorer = () => {
   const [auditDialogOpen, setAuditDialogOpen] = useState(false);
   const [auditData, setAuditData] = useState(null);
   const [auditLoading, setAuditLoading] = useState(false);
+
+  // Expiry Edit state in Registry Dialog
+  const [isEditingExpiry, setIsEditingExpiry] = useState(false);
+  const [editExpiryDate, setEditExpiryDate] = useState('');
 
   const [isSignedUpload, setIsSignedUpload] = useState(false);
   const [uploadSummary, setUploadSummary] = useState('');
@@ -326,6 +340,7 @@ const FolderExplorer = () => {
     if (!targetId) return;
     setAuditLoading(true);
     setAuditDialogOpen(true);
+    setIsEditingExpiry(false);
     handleMenuClose();
     try {
       const res = await api.get(`/api/folders/${targetId}/audit/`);
@@ -335,6 +350,31 @@ const FolderExplorer = () => {
       setError("Failed to load directory activity insights.");
     } finally {
       setAuditLoading(false);
+    }
+  };
+
+  const handleStartEditExpiry = () => {
+    setEditExpiryDate(auditData?.folder?.expiry_date ? auditData.folder.expiry_date.substring(0, 10) : '');
+    setIsEditingExpiry(true);
+  };
+
+  const handleSaveExpiry = async () => {
+    if (!auditData?.folder?.id) return;
+    try {
+      const res = await api.patch(`/api/folders/${auditData.folder.id}/`, {
+        expiry_date: editExpiryDate || null
+      });
+      setAuditData(prev => ({
+        ...prev,
+        folder: {
+          ...prev.folder,
+          expiry_date: res.data.expiry_date
+        }
+      }));
+      setIsEditingExpiry(false);
+      fetchContents();
+    } catch (err) {
+      alert(err.response?.data?.detail || "Failed to update expiry date.");
     }
   };
 
@@ -1413,9 +1453,48 @@ const FolderExplorer = () => {
                   </Grid>
                   <Grid item xs={12} sm={6}>
                     <Typography variant="body2" color="text.secondary">Expiry Date</Typography>
-                    <Typography variant="body1" sx={{ fontWeight: 600, color: 'error.main' }}>
-                      {auditData.folder.expiry_date ? new Date(auditData.folder.expiry_date).toLocaleDateString() : 'None Set'}
-                    </Typography>
+                    {isEditingExpiry ? (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+                        <TextField
+                          type="date"
+                          size="small"
+                          value={editExpiryDate}
+                          onChange={(e) => setEditExpiryDate(e.target.value)}
+                          InputLabelProps={{ shrink: true }}
+                          sx={{ width: 150 }}
+                        />
+                        <IconButton 
+                          size="small" 
+                          color="success" 
+                          onClick={handleSaveExpiry}
+                        >
+                          <CheckIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton 
+                          size="small" 
+                          color="error" 
+                          onClick={() => setIsEditingExpiry(false)}
+                        >
+                          <CloseIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
+                    ) : (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+                        <Typography variant="body1" sx={{ fontWeight: 600, color: 'error.main' }}>
+                          {auditData.folder.expiry_date ? new Date(auditData.folder.expiry_date).toLocaleDateString() : 'None Set'}
+                        </Typography>
+                        {(user?.name === auditData.folder.created_by || user?.role?.name === 'Super Admin' || user?.role?.name === 'Admin') && (
+                          <IconButton 
+                            size="small" 
+                            color="primary" 
+                            onClick={handleStartEditExpiry}
+                            sx={{ p: 0.5 }}
+                          >
+                            <EditIcon fontSize="small" sx={{ fontSize: '1rem' }} />
+                          </IconButton>
+                        )}
+                      </Box>
+                    )}
                   </Grid>
                   <Grid item xs={12}>
                     <Typography variant="body2" color="text.secondary">Summary</Typography>

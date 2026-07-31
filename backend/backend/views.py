@@ -13,6 +13,9 @@ from files.serializers import FileSerializer
 from users.serializers import CustomUserSerializer
 from activity_logs.serializers import ActivityLogSerializer
 from notifications.serializers import NotificationSerializer
+from mous.models import MOU
+import datetime
+
 
 User = get_user_model()
 
@@ -101,11 +104,105 @@ class DashboardStatsView(APIView):
         recent_folders = folders_qs.order_by('-created_at')[:4]
         recent_folders_serializer = FolderSerializer(recent_folders, many=True)
 
+        # Real MOU stats from database
+        from django.db.models import Count
+        active_mous = MOU.objects.filter(status='Active').count()
+        pending_approval = MOU.objects.filter(status='Pending Verification').count()
+        
+        today = datetime.date.today()
+        expiring_30 = MOU.objects.filter(
+            status='Active', 
+            expiry_date__lte=today + datetime.timedelta(days=30), 
+            expiry_date__gte=today
+        ).count()
+
+        # Real Department/Folder distribution
+        mou_depts = MOU.objects.values('department_name').annotate(value=Count('id')).order_by('-value')
+        dept_colors = {
+            'Engineering': '#3B82F6',
+            'Medical': '#14B8A6',
+            'Commerce': '#F59E0B',
+            'Arts': '#EC4899',
+        }
+        
+        mou_distribution_data = []
+        for item in mou_depts:
+            name = item['department_name'] or 'General'
+            mou_distribution_data.append({
+                'name': name,
+                'value': item['value'],
+                'color': dept_colors.get(name, '#8B5CF6')
+            })
+
+        # Fallback if no MOUs exist
+        if not mou_distribution_data:
+            for folder in Folder.objects.filter(parent=None):
+                file_count = File.objects.filter(folder=folder).count()
+                mou_distribution_data.append({
+                    'name': folder.name,
+                    'value': file_count if file_count > 0 else 1,
+                    'color': dept_colors.get(folder.name, '#8B5CF6')
+                })
+
+        # Trend Data (Last 6 Months)
+        trend_months = []
+        for i in range(5, -1, -1):
+            m = today.month - i
+            y = today.year
+            while m <= 0:
+                m += 12
+                y -= 1
+            month_date = datetime.date(y, m, 1)
+            month_name = month_date.strftime('%b')
+            trend_months.append({
+                'month_date': month_date,
+                'month': month_name,
+                'year': y,
+                'Active': 0,
+                'Pending': 0,
+                'Expiring': 0
+            })
+            
+        for month_bucket in trend_months:
+            start_date = month_bucket['month_date']
+            next_m = start_date.month + 1
+            next_y = start_date.year
+            if next_m > 12:
+                next_m = 1
+                next_y += 1
+            end_date = datetime.date(next_y, next_m, 1)
+            
+            month_bucket['Active'] = MOU.objects.filter(
+                status='Active',
+                created_at__gte=datetime.datetime.combine(start_date, datetime.time.min),
+                created_at__lt=datetime.datetime.combine(end_date, datetime.time.min)
+            ).count()
+            
+            month_bucket['Pending'] = MOU.objects.filter(
+                status='Pending Verification',
+                created_at__gte=datetime.datetime.combine(start_date, datetime.time.min),
+                created_at__lt=datetime.datetime.combine(end_date, datetime.time.min)
+            ).count()
+            
+            month_bucket['Expiring'] = MOU.objects.filter(
+                status='Active',
+                expiry_date__gte=start_date,
+                expiry_date__lt=end_date
+            ).count()
+            
+        for mb in trend_months:
+            mb.pop('month_date')
+
         return Response({
             "total_users": total_users,
             "active_users": active_users,
             "total_folders": total_folders,
             "total_files": total_files,
+            "active_mous": active_mous,
+            "pending_approval": pending_approval,
+            "expiring_30_days": expiring_30,
+            "distribution_data": mou_distribution_data,
+            "trend_data": trend_months,
             "recent_uploads": recent_files_serializer.data,
             "recent_folders": recent_folders_serializer.data,
             "recent_activities": activities_data,

@@ -17,9 +17,11 @@ import FolderIcon from '@mui/icons-material/Folder';
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
 import ExtensionIcon from '@mui/icons-material/Extension';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
+import EmailIcon from '@mui/icons-material/Email';
+import DescriptionIcon from '@mui/icons-material/Description';
 
 import {
-  getTemplateCollection, uploadTemplateDocument, archiveTemplateDocument, getMasterDocTypes
+  getTemplateCollection, uploadTemplateDocument, archiveTemplateDocument, getMasterDocTypes, sendTemplateDocumentEmail
 } from '../services/templateApi';
 import api from '../services/api';
 import PDFPreviewModal from '../components/PDFPreviewModal';
@@ -41,8 +43,6 @@ const TemplateDetail = () => {
   const [selDocType, setSelDocType] = useState('');
   const [version, setVersion] = useState('1.0');
   const [effectiveDate, setEffectiveDate] = useState('');
-  const [expiryDate, setExpiryDate] = useState('');
-  const [revisionDate, setRevisionDate] = useState('');
   const [remarks, setRemarks] = useState('');
   const [uploading, setUploading] = useState(false);
   
@@ -53,6 +53,14 @@ const TemplateDetail = () => {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewFileUrl, setPreviewFileUrl] = useState('');
   const [previewDocId, setPreviewDocId] = useState(null);
+
+  // Email Dialog state
+  const [emailOpen, setEmailOpen] = useState(false);
+  const [emailRecipient, setEmailRecipient] = useState('');
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailBody, setEmailBody] = useState('');
+  const [emailSending, setEmailSending] = useState(false);
+  const [selectedDocForEmail, setSelectedDocForEmail] = useState(null);
   const [previewTitle, setPreviewTitle] = useState('');
 
   const fetchCollectionDetails = async () => {
@@ -87,8 +95,6 @@ const TemplateDetail = () => {
     setSelDocType('');
     setVersion(prefillVersion);
     setEffectiveDate('');
-    setExpiryDate('');
-    setRevisionDate('');
     setRemarks('');
     setFormError(null);
     setUploadOpen(true);
@@ -146,8 +152,6 @@ const TemplateDetail = () => {
       formData.append('document_type_id', selDocType);
       formData.append('version', version);
       if (effectiveDate) formData.append('effective_date', effectiveDate);
-      if (expiryDate) formData.append('expiry_date', expiryDate);
-      if (revisionDate) formData.append('revision_date', revisionDate);
       formData.append('remarks', remarks);
 
       await uploadTemplateDocument(id, formData);
@@ -158,6 +162,36 @@ const TemplateDetail = () => {
       setFormError('Failed to upload PDF template document.');
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleOpenEmail = (doc) => {
+    setSelectedDocForEmail(doc);
+    setEmailRecipient('');
+    setEmailSubject(`Attached Template: ${doc.document_name}`);
+    setEmailBody(`Dear user,\n\nPlease find the attached template document: ${doc.document_name} v${doc.version}.\n\nBest regards,\nLegal Document Management System`);
+    setEmailOpen(true);
+  };
+
+  const handleSendEmail = async (e) => {
+    e.preventDefault();
+    if (!selectedDocForEmail || !emailRecipient.trim()) return;
+
+    setEmailSending(true);
+    try {
+      await sendTemplateDocumentEmail(selectedDocForEmail.id, {
+        recipient_email: emailRecipient.trim(),
+        subject: emailSubject.trim(),
+        body: emailBody.trim()
+      });
+      setEmailOpen(false);
+      setSelectedDocForEmail(null);
+      alert("Email sent successfully!");
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.detail || "Failed to send email.");
+    } finally {
+      setEmailSending(false);
     }
   };
 
@@ -215,14 +249,6 @@ const TemplateDetail = () => {
             </Typography>
           </Box>
         </Box>
-        <Button
-          variant="contained"
-          startIcon={<CloudUploadIcon />}
-          onClick={() => handleOpenUpload()}
-          sx={{ borderRadius: '24px', px: 3, fontWeight: 700 }}
-        >
-          Upload PDF File
-        </Button>
       </Box>
 
       <Grid container spacing={3.5}>
@@ -253,9 +279,22 @@ const TemplateDetail = () => {
                         <Typography color="text.secondary" sx={{ display: 'block', mb: 2 }}>
                           No PDF templates uploaded in this collection.
                         </Typography>
-                        <Button startIcon={<CloudUploadIcon />} variant="outlined" onClick={() => handleOpenUpload()} sx={{ borderRadius: '18px' }}>
-                          Upload PDF Document
-                        </Button>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5 }}>
+                          <Button startIcon={<CloudUploadIcon />} variant="outlined" onClick={() => handleOpenUpload()} sx={{ borderRadius: '18px' }}>
+                            Upload PDF Document
+                          </Button>
+                          <Button 
+                            startIcon={<EmailIcon />} 
+                            variant="contained" 
+                            disabled={true} 
+                            sx={{ borderRadius: '18px' }}
+                          >
+                            Send Email
+                          </Button>
+                          <Typography variant="caption" color="text.secondary">
+                            (Upload a PDF first to send it via email)
+                          </Typography>
+                        </Box>
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -299,6 +338,9 @@ const TemplateDetail = () => {
                         <TableCell align="right">
                           <IconButton size="small" onClick={() => handlePreview(doc)} sx={{ color: 'primary.main', mr: 0.5 }}>
                             <VisibilityIcon fontSize="small" />
+                          </IconButton>
+                          <IconButton size="small" onClick={() => handleOpenEmail(doc)} sx={{ color: 'info.main', mr: 0.5 }}>
+                            <EmailIcon fontSize="small" />
                           </IconButton>
                           {doc.status !== 'Archived' && (
                             <IconButton size="small" onClick={() => handleArchive(doc.id, doc.document_name)} sx={{ color: 'error.main' }}>
@@ -398,49 +440,49 @@ const TemplateDetail = () => {
         <DialogTitle sx={{ fontWeight: 800 }}>Upload PDF Template File</DialogTitle>
         <DialogContent dividers>
           {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
-          <Grid container spacing={2.5}>
-            {/* Drag & Drop File Upload Field */}
-            <Grid item xs={12}>
-              <Box
-                onDragEnter={handleDrag}
-                onDragOver={handleDrag}
-                onDragLeave={handleDrag}
-                onDrop={handleDrop}
-                sx={{
-                  border: '2px dashed',
-                  borderColor: isDragActive ? 'primary.main' : 'divider',
-                  bgcolor: isDragActive ? 'rgba(var(--indigo-rgb), 0.04)' : 'action.hover',
-                  borderRadius: '16px',
-                  p: 4.5,
-                  textAlign: 'center',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  '&:hover': {
-                    borderColor: 'primary.main',
-                    bgcolor: 'rgba(var(--indigo-rgb), 0.02)'
-                  }
-                }}
-                onClick={() => document.getElementById('template-file-input').click()}
-              >
-                <input
-                  id="template-file-input"
-                  type="file"
-                  accept="application/pdf"
-                  style={{ display: 'none' }}
-                  onChange={handleFileChange}
-                />
-                <CloudUploadIcon sx={{ fontSize: 44, color: 'primary.main', mb: 1 }} />
-                <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
-                  {file ? file.name : "Drag & Drop PDF or Click to Browse"}
-                </Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                  Supports PDF files up to 25MB.
-                </Typography>
-              </Box>
-            </Grid>
+          
+          {/* Drag & Drop File Upload Field */}
+          <Box
+            onDragEnter={handleDrag}
+            onDragOver={handleDrag}
+            onDragLeave={handleDrag}
+            onDrop={handleDrop}
+            sx={{
+              border: '2px dashed',
+              borderColor: isDragActive ? 'primary.main' : 'divider',
+              bgcolor: isDragActive ? 'rgba(var(--indigo-rgb), 0.04)' : 'action.hover',
+              borderRadius: '16px',
+              p: 4.5,
+              textAlign: 'center',
+              cursor: 'pointer',
+              mb: 3,
+              transition: 'all 0.2s',
+              '&:hover': {
+                borderColor: 'primary.main',
+                bgcolor: 'rgba(var(--indigo-rgb), 0.02)'
+              }
+            }}
+            onClick={() => document.getElementById('template-file-input').click()}
+          >
+            <input
+              id="template-file-input"
+              type="file"
+              accept="application/pdf"
+              style={{ display: 'none' }}
+              onChange={handleFileChange}
+            />
+            <CloudUploadIcon sx={{ fontSize: 44, color: 'primary.main', mb: 1 }} />
+            <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+              {file ? file.name : "Drag & Drop PDF or Click to Browse"}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+              Supports PDF files up to 25MB.
+            </Typography>
+          </Box>
 
+          <Grid container spacing={2.5}>
             {/* Document metadata fields */}
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12}>
               <TextField
                 fullWidth
                 required
@@ -450,15 +492,21 @@ const TemplateDetail = () => {
                 onChange={(e) => setDocName(e.target.value)}
               />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12}>
               <FormControl fullWidth required>
-                <InputLabel>Document Type</InputLabel>
-                <Select value={selDocType} label="Document Type" onChange={(e) => setSelDocType(e.target.value)}>
+                <InputLabel id="upload-doc-type-label">Document Type</InputLabel>
+                <Select
+                  labelId="upload-doc-type-label"
+                  id="upload-doc-type"
+                  value={selDocType}
+                  label="Document Type"
+                  onChange={(e) => setSelDocType(e.target.value)}
+                >
                   {docTypes.map(t => <MenuItem key={t.id} value={t.id}>{t.name}</MenuItem>)}
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12}>
               <TextField
                 fullWidth
                 label="Version Number"
@@ -467,33 +515,13 @@ const TemplateDetail = () => {
                 onChange={(e) => setVersion(e.target.value)}
               />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12}>
               <TextField
                 fullWidth
                 type="date"
                 label="Effective Date"
                 value={effectiveDate}
                 onChange={(e) => setEffectiveDate(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                type="date"
-                label="Expiry Date"
-                value={expiryDate}
-                onChange={(e) => setExpiryDate(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                type="date"
-                label="Revision Date"
-                value={revisionDate}
-                onChange={(e) => setRevisionDate(e.target.value)}
                 InputLabelProps={{ shrink: true }}
               />
             </Grid>
@@ -531,6 +559,61 @@ const TemplateDetail = () => {
         docId={previewDocId}
         title={previewTitle}
       />
+
+      {/* Send Email Dialog */}
+      <Dialog open={emailOpen} onClose={() => { setEmailOpen(false); setSelectedDocForEmail(null); }} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: '20px' } }}>
+        <form onSubmit={handleSendEmail}>
+          <DialogTitle sx={{ fontWeight: 800, pb: 1 }}>Send Document via Email</DialogTitle>
+          <DialogContent>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, mt: 1.5 }}>
+              <Typography variant="body2" color="text.secondary">
+                The document <strong>{selectedDocForEmail?.document_name} (v{selectedDocForEmail?.version})</strong> will be attached as a PDF file.
+              </Typography>
+              
+              <TextField
+                required
+                label="Recipient Email"
+                placeholder="e.g. user@example.com"
+                type="email"
+                value={emailRecipient}
+                onChange={(e) => setEmailRecipient(e.target.value)}
+                fullWidth
+              />
+
+              <TextField
+                required
+                label="Email Subject"
+                value={emailSubject}
+                onChange={(e) => setEmailSubject(e.target.value)}
+                fullWidth
+              />
+
+              <TextField
+                required
+                label="Message Body"
+                multiline
+                rows={4}
+                value={emailBody}
+                onChange={(e) => setEmailBody(e.target.value)}
+                fullWidth
+              />
+            </Box>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3 }}>
+            <Button onClick={() => { setEmailOpen(false); setSelectedDocForEmail(null); }} variant="outlined" sx={{ borderRadius: '10px' }}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={emailSending}
+              sx={{ borderRadius: '10px', fontWeight: 700 }}
+            >
+              {emailSending ? 'Sending...' : 'Send Email'}
+            </Button>
+          </DialogActions>
+        </form>
+      </Dialog>
     </Box>
   );
 };

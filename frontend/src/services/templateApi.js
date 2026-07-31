@@ -57,3 +57,10 @@ export const uploadTemplateDocument = (collectionId, formData) => {
 export const logDocumentPreview = (id) => api.get(`/api/mous/documents/${id}/log-preview/`).then(res => res.data);
 export const logDocumentDownload = (id) => api.get(`/api/mous/documents/${id}/log-download/`).then(res => res.data);
 export const archiveTemplateDocument = (id) => api.post(`/api/mous/documents/${id}/archive/`).then(res => res.data);
+export const sendTemplateDocumentEmail = (id, data) => api.post(`/api/mous/documents/${id}/send-email/`, data).then(res => res.data);
+
+export const getMOUCategories = () => api.get('/api/mous/categories/').then(res => res.data);
+export const createMOUCategory = (data) => api.post('/api/mous/categories/', data).then(res => res.data);
+export const deleteMOUCategory = (id) => api.delete(`/api/mous/categories/${id}/`).then(res => res.data);
+
+

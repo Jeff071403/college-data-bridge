@@ -15,7 +15,7 @@ import Profile from './pages/Profile';
 import SystemMap from './pages/SystemMap';
 import MOUDetail from './pages/MOUDetail';
 import MOUCreate from './pages/MOUCreate';
-import Reports from './pages/Reports';
+
 import Templates from './pages/Templates';
 import TemplateDetail from './pages/TemplateDetail';
 import MasterData from './pages/MasterData';
@@ -85,14 +85,7 @@ function App() {
               }
             />
 
-            <Route
-              path="/reports"
-              element={
-                <ProtectedRoute requiredPermission="view_dashboard">
-                  <Layout><Reports /></Layout>
-                </ProtectedRoute>
-              }
-            />
+
 
             <Route
               path="/templates"

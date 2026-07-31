@@ -181,6 +181,26 @@ const Layout = ({ children }) => {
     }
   };
 
+  const handleClearNotification = async (id) => {
+    try {
+      await api.delete(`/api/notifications/${id}/`);
+      fetchNotifications();
+    } catch (err) {
+      console.error("Clear notification failed:", err);
+    }
+  };
+
+  const handleClearAllNotifications = async () => {
+    if (window.confirm("Are you sure you want to clear all notifications?")) {
+      try {
+        await api.post('/api/notifications/clear-all/');
+        fetchNotifications();
+      } catch (err) {
+        console.error("Clear all notifications failed:", err);
+      }
+    }
+  };
+
   const handleSearchSubmit = (e) => {
     if (e.key === 'Enter' && searchQuery.trim()) {
       navigate(`/explorer?search=${encodeURIComponent(searchQuery.trim())}`);
@@ -193,7 +213,6 @@ const Layout = ({ children }) => {
     { text: 'Shared With Me',  icon: <ShareIcon />,              path: '/shared',     permission: 'view_dashboard', iconColor: '#3B82F6' },
     { text: 'Departments',     icon: <BusinessIcon />,           path: '/departments', permission: 'view_dashboard', iconColor: '#14B8A6' },
     { text: 'Notifications',   icon: <NotificationsIcon />,      path: '/notifications', permission: 'view_notifications', iconColor: '#F43F5E' },
-    { text: 'Reports & Stats', icon: <AssessmentIcon />,         path: '/reports',    permission: 'view_dashboard', iconColor: '#10B981' },
     { text: 'MOU Templates',   icon: <ExtensionIcon />,          path: '/templates',  permission: 'manage_users',   iconColor: '#F59E0B' },
     { text: 'MOU Repositories', icon: <FolderCopyIcon />,          path: '/explorer',   permission: 'view_folder',    iconColor: '#0EA5E9' },
     { text: 'User Management', icon: <ManageAccountsIcon />,      path: '/users',      permission: 'manage_users',   iconColor: '#EC4899' },
@@ -768,11 +787,18 @@ const Layout = ({ children }) => {
           <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
             Notifications
           </Typography>
-          {unreadCount > 0 && (
-            <Button size="small" onClick={handleMarkAllRead} sx={{ fontSize: '0.75rem', textTransform: 'none' }}>
-              Mark all read
-            </Button>
-          )}
+          <Box sx={{ display: 'flex', gap: 0.5 }}>
+            {unreadCount > 0 && (
+              <Button size="small" onClick={handleMarkAllRead} sx={{ fontSize: '0.72rem', textTransform: 'none', px: 0.5 }}>
+                Mark all read
+              </Button>
+            )}
+            {notifications.length > 0 && (
+              <Button size="small" onClick={handleClearAllNotifications} color="error" sx={{ fontSize: '0.72rem', textTransform: 'none', px: 0.5 }}>
+                Clear all
+              </Button>
+            )}
+          </Box>
         </Box>
         <Divider />
         <List sx={{ p: 0, overflowY: 'auto', maxHeight: 300 }}>
@@ -782,11 +808,9 @@ const Layout = ({ children }) => {
                 key={n.id} 
                 disablePadding
                 secondaryAction={
-                  !n.is_read && (
-                    <IconButton edge="end" size="small" onClick={() => handleMarkAsRead(n.id)}>
-                      <CloseIcon fontSize="inherit" />
-                    </IconButton>
-                  )
+                  <IconButton edge="end" size="small" onClick={() => handleClearNotification(n.id)} sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}>
+                    <CloseIcon fontSize="inherit" />
+                  </IconButton>
                 }
               >
                 <ListItemButton 

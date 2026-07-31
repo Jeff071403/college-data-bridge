@@ -2,7 +2,7 @@ from rest_framework import serializers
 from .models import (
     MOUTemplate, MOU, MOUDocument, MOURenewal,
     TemplateCategory, OrganizationType, CollaborationType, DocumentType, Tag,
-    DepartmentCategory, Department, TemplateCollection, TemplateDocument
+    DepartmentCategory, Department, TemplateCollection, TemplateDocument, MOUCategory
 )
 from files.serializers import FileSerializer
 from folders.serializers import FolderSerializer
@@ -183,5 +183,12 @@ class TemplateCollectionSerializer(serializers.ModelSerializer):
     class Meta:
         model = TemplateCollection
         fields = '__all__'
+
+
+class MOUCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MOUCategory
+        fields = '__all__'
+
 
 

@@ -1045,7 +1045,7 @@ const UserManagement = () => {
                         <TableCell>
                           <Chip label={userItem.role?.name || 'No Role'} color="primary" size="small" variant="outlined" sx={{ fontWeight: 600, fontSize: '0.72rem', height: 24, borderRadius: '6px' }} />
                         </TableCell>
-                        <TableCell sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{userItem.department || '—'}</TableCell>
+                        <TableCell sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{userItem.department || userItem.company_name || '—'}</TableCell>
                         <TableCell>
                           <Chip
                             label={userItem.status}
