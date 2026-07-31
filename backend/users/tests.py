@@ -625,3 +625,34 @@ class WebOAuthIntegrationTests(TestCase):
         self.assertFalse(setting.oauth_connected)
         self.assertEqual(setting.connection_status, 'Disconnected')
 
+    def test_update_root_folder_id(self):
+        token = self.get_jwt_token("admin@test.edu", "password123")
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + token)
+
+        from users.models import GoogleDriveSetting
+        setting = GoogleDriveSetting.objects.create(
+            connected_email="jeffersonsamuel003@gmail.com",
+            connection_status="Connected",
+            oauth_connected=True,
+            is_active=True,
+            root_folder_id="old_id"
+        )
+
+        # 1. Test updating with plain ID
+        response = self.client.patch('/api/google-drive/update-root-folder/', {
+            'root_folder_id': 'new_clean_id'
+        })
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['root_folder_id'], 'new_clean_id')
+        setting.refresh_from_db()
+        self.assertEqual(setting.root_folder_id, 'new_clean_id')
+
+        # 2. Test updating with full Google Drive URL
+        response = self.client.patch('/api/google-drive/update-root-folder/', {
+            'root_folder_id': 'https://drive.google.com/drive/folders/1v5kj8M_Ll2RXZaQuBJGoSWhq1IYb7n9u?usp=sharing'
+        })
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['root_folder_id'], '1v5kj8M_Ll2RXZaQuBJGoSWhq1IYb7n9u')
+        setting.refresh_from_db()
+        self.assertEqual(setting.root_folder_id, '1v5kj8M_Ll2RXZaQuBJGoSWhq1IYb7n9u')
+

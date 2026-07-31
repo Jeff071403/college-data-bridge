@@ -290,3 +290,32 @@ class GoogleDriveViewSet(viewsets.ViewSet):
                 {"detail": f"Google Drive connection test failed: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+    @action(detail=False, methods=['patch'], url_path='update-root-folder')
+    def update_root_folder(self, request):
+        root_folder_id = request.data.get('root_folder_id')
+        if root_folder_id is None:
+            return Response({"detail": "root_folder_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Clean folder ID from full URL if pasted as a link
+        root_folder_id = root_folder_id.strip()
+        if 'drive.google.com' in root_folder_id:
+            import re
+            match = re.search(r'folders/([a-zA-Z0-9_-]+)', root_folder_id)
+            if match:
+                root_folder_id = match.group(1)
+
+        setting = GoogleDriveSetting.objects.filter(is_active=True).first()
+        if not setting:
+            setting = GoogleDriveSetting.objects.first()
+        if not setting:
+            return Response({"detail": "No active Google Drive connection found to update"}, status=status.HTTP_400_BAD_REQUEST)
+
+        setting.root_folder_id = root_folder_id
+        setting.save()
+
+        log_activity(request.user, f"Updated Google Drive root folder ID to: {root_folder_id}", "drive")
+        return Response({
+            "detail": "Root folder ID updated successfully",
+            "root_folder_id": setting.root_folder_id
+        })

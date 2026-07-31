@@ -18,6 +18,8 @@ const GoogleDriveSettingsTab = () => {
   const [success, setSuccess] = useState(null);
   const [connecting, setConnecting] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [rootFolderId, setRootFolderId] = useState('');
+  const [savingFolderId, setSavingFolderId] = useState(false);
 
   const fetchStatus = useCallback(async () => {
     setLoading(true);
@@ -25,6 +27,7 @@ const GoogleDriveSettingsTab = () => {
     try {
       const response = await api.get('/api/google-drive/status/');
       setStatusData(response.data);
+      setRootFolderId(response.data.root_folder_id || '');
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to fetch Google Drive status.');
     } finally {
@@ -68,6 +71,23 @@ const GoogleDriveSettingsTab = () => {
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to start Google Drive authorization.');
       setConnecting(false);
+    }
+  };
+
+  const handleSaveRootFolder = async () => {
+    setSavingFolderId(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const response = await api.patch('/api/google-drive/update-root-folder/', {
+        root_folder_id: rootFolderId
+      });
+      setSuccess(response.data.detail || 'Root folder ID updated successfully.');
+      fetchStatus();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to update root folder ID.');
+    } finally {
+      setSavingFolderId(false);
     }
   };
 
@@ -247,13 +267,36 @@ const GoogleDriveSettingsTab = () => {
                     />
                   </Grid>
                   <Grid item xs={12} sm={6}>
-                    <TextField
-                      fullWidth
-                      label="Current Root Folder ID"
-                      value={statusData.root_folder_id}
-                      disabled
-                      sx={{ '& .MuiInputBase-input.Mui-disabled': { WebkitTextFillColor: 'text.primary', fontWeight: 600 } }}
-                    />
+                    <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+                      <TextField
+                        fullWidth
+                        label="Current Root Folder ID"
+                        value={rootFolderId}
+                        onChange={(e) => setRootFolderId(e.target.value)}
+                        placeholder="Paste folder ID or full Google Drive URL"
+                        disabled={savingFolderId || !isConnected}
+                        helperText="Subfolders/files will be created inside this folder. Paste URL or ID."
+                      />
+                      <Button
+                        variant="contained"
+                        onClick={handleSaveRootFolder}
+                        disabled={savingFolderId || !isConnected || rootFolderId === (statusData.root_folder_id || '')}
+                        sx={{
+                          backgroundColor: '#4F46E5',
+                          color: '#fff',
+                          height: '56px',
+                          px: 3,
+                          borderRadius: '10px',
+                          textTransform: 'none',
+                          fontWeight: 700,
+                          '&:hover': {
+                            backgroundColor: '#4338CA',
+                          }
+                        }}
+                      >
+                        {savingFolderId ? <CircularProgress size={24} color="inherit" /> : 'Save'}
+                      </Button>
+                    </Box>
                   </Grid>
                   <Grid item xs={12} sm={6}>
                     <TextField
