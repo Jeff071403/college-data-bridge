@@ -34,6 +34,21 @@ const SharedWithMe = () => {
     fetchData();
   }, []);
 
+  // Background polling to dynamically sync newly shared folders
+  useEffect(() => {
+    const fetchSharedBackground = async () => {
+      try {
+        const foldersResponse = await api.get('/api/folders/shared/');
+        setSharedFoldersList(foldersResponse.data);
+      } catch (err) {
+        console.error('Background shared folders sync failed:', err);
+      }
+    };
+
+    const interval = setInterval(fetchSharedBackground, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
   if (loading) return (
     <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
       <CircularProgress />

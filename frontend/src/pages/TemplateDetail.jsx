@@ -419,13 +419,13 @@ const TemplateDetail = () => {
                       borderRadius: '50%', bgcolor: 'primary.main'
                     }} />
                     <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block' }}>
-                      {new Date(log.timestamp).toLocaleString()}
+                      {log.created_at ? new Date(log.created_at).toLocaleString() : 'N/A'}
                     </Typography>
                     <Typography variant="body2" sx={{ fontSize: '0.82rem', fontWeight: 600 }}>
                       {log.action}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
-                      By: {log.user_email}
+                      By: {log.user ? `${log.user.name} (${log.user.email})` : 'System'}
                     </Typography>
                   </Box>
                 ))

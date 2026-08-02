@@ -143,6 +143,7 @@ const Dashboard = () => {
   const diskTotal = storage.disk_total_bytes || 0;
   const diskUsed = storage.disk_used_bytes || 0;
   const diskFree = storage.disk_free_bytes || 0;
+  const storageType = storage.storage_type || 'local';
   const breakdown = storage.breakdown || {};
 
   const recentUploads = stats?.recent_uploads || [];
@@ -219,42 +220,44 @@ const Dashboard = () => {
         </Box>
       </Box>
 
-      {/* ── Stat Highlights Bar ── */}
-      <Grid container spacing={2.5} sx={{ mb: 3.5 }}>
-        {[
-          { title: 'Active MOUs',        count: stats?.active_mous || 0,  label: 'Fully Verified & Active',     color: '#10B981', icon: <CheckCircleIcon />,        bg: 'rgba(16,185,129,0.1)',  grad: 'linear-gradient(90deg,#10B981,#059669)' },
-          { title: 'Pending Approval',   count: stats?.pending_approval || 0, label: 'Requires Admin Verification', color: '#F59E0B', icon: <HourglassTopIcon />,        bg: 'rgba(245,158,11,0.1)', grad: 'linear-gradient(90deg,#F59E0B,#D97706)' },
-          { title: 'Expiring in 30 Days',count: stats?.expiring_30_days || 0, label: 'Expires within 30 Days',      color: '#F97316', icon: <WarningIcon />,             bg: 'rgba(249,115,22,0.1)', grad: 'linear-gradient(90deg,#F97316,#EA580C)' },
-          { title: 'Repositories',       count: stats?.total_folders || 0, label: 'Department Folders',          color: 'var(--indigo)', icon: <AssignmentIcon />,          bg: 'rgba(var(--indigo-rgb), 0.1)',  grad: 'linear-gradient(90deg, var(--indigo), var(--violet))' },
-        ].map((item, idx) => (
-          <Grid item xs={12} sm={6} md={3} key={item.title}>
-            <Card sx={{
-              p: 0, borderRadius: '18px', overflow: 'hidden',
-              border: '1px solid', borderColor: 'divider', boxShadow: 'none',
-              transition: 'transform 0.22s ease, box-shadow 0.22s ease',
-              animationDelay: `${idx * 80}ms`,
-              '&:hover': { transform: 'translateY(-3px)', boxShadow: `0 10px 28px ${item.color}22` },
-            }}>
-              <Box sx={{ height: 4, background: item.grad }} />
-              <Box sx={{ p: 2.5 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <Box>
-                    <Typography sx={{ fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.7px', color: 'text.secondary', mb: 0.4 }}>{item.title}</Typography>
-                    <Typography sx={{ fontSize: '2.4rem', fontWeight: 900, lineHeight: 1, color: item.color }}>
-                      <CountUp end={item.count} />
-                    </Typography>
-                  </Box>
-                  <Avatar sx={{ bgcolor: item.bg, color: item.color, width: 44, height: 44, borderRadius: '12px' }}>{item.icon}</Avatar>
-                </Box>
-                <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 500, mt: 1.2, display: 'block' }}>{item.label}</Typography>
-              </Box>
-            </Card>
-          </Grid>
-        ))}
-      </Grid>
-
-      {/* ── Main Layout: Left Column & Right Widgets ── */}
+      {/* ── Main Layout: Grid Container ── */}
       <Grid container spacing={3}>
+
+        {/* ── Stat Highlights Bar ── */}
+        <Grid item xs={12}>
+          <Grid container spacing={3}>
+            {[
+              { title: 'Active MOUs',        count: stats?.active_mous || 0,  label: 'Fully Verified & Active',     color: '#10B981', icon: <CheckCircleIcon />,        bg: 'rgba(16,185,129,0.1)',  grad: 'linear-gradient(90deg,#10B981,#059669)' },
+              { title: 'Pending Approval',   count: stats?.pending_approval || 0, label: 'Requires Admin Verification', color: '#F59E0B', icon: <HourglassTopIcon />,        bg: 'rgba(245,158,11,0.1)', grad: 'linear-gradient(90deg,#F59E0B,#D97706)' },
+              { title: 'Expiring in 30 Days',count: stats?.expiring_30_days || 0, label: 'Expires within 30 Days',      color: '#F97316', icon: <WarningIcon />,             bg: 'rgba(249,115,22,0.1)', grad: 'linear-gradient(90deg,#F97316,#EA580C)' },
+              { title: 'Repositories',       count: stats?.total_folders || 0, label: 'Department Folders',          color: 'var(--indigo)', icon: <AssignmentIcon />,          bg: 'rgba(var(--indigo-rgb), 0.1)',  grad: 'linear-gradient(90deg, var(--indigo), var(--violet))' },
+            ].map((item, idx) => (
+              <Grid item xs={12} sm={6} md={3} lg={3} key={item.title}>
+                <Card sx={{
+                  p: 0, borderRadius: '18px', overflow: 'hidden',
+                  border: '1px solid', borderColor: 'divider', boxShadow: 'none',
+                  transition: 'transform 0.22s ease, box-shadow 0.22s ease',
+                  animationDelay: `${idx * 80}ms`,
+                  '&:hover': { transform: 'translateY(-3px)', boxShadow: `0 10px 28px ${item.color}22` },
+                }}>
+                  <Box sx={{ height: 4, background: item.grad }} />
+                  <Box sx={{ p: 2.5 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <Box>
+                        <Typography sx={{ fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.7px', color: 'text.secondary', mb: 0.4 }}>{item.title}</Typography>
+                        <Typography sx={{ fontSize: '2.4rem', fontWeight: 900, lineHeight: 1, color: item.color }}>
+                          <CountUp end={item.count} />
+                        </Typography>
+                      </Box>
+                      <Avatar sx={{ bgcolor: item.bg, color: item.color, width: 44, height: 44, borderRadius: '12px' }}>{item.icon}</Avatar>
+                    </Box>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 500, mt: 1.2, display: 'block' }}>{item.label}</Typography>
+                  </Box>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        </Grid>
 
         {/* ═══════════ LEFT COLUMN ═══════════ */}
         <Grid item xs={12} lg={8}>
@@ -450,39 +453,56 @@ const Dashboard = () => {
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <RechartsTooltip />
+                  <RechartsTooltip
+                    formatter={(value) => {
+                      const totalMous = distributionData.reduce((sum, item) => sum + item.value, 0);
+                      const percentage = totalMous > 0 ? Math.round((value / totalMous) * 100) : 0;
+                      return [`${value} MOUs (${percentage}%)`, 'Agreements'];
+                    }}
+                    contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 6px 20px rgba(0,0,0,0.12)', fontSize: '0.8rem' }}
+                  />
                 </PieChart>
               </ResponsiveContainer>
             </Box>
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, justifyContent: 'center', mt: 1 }}>
-              {distributionData.map((item) => (
-                <Chip
-                  key={item.name}
-                  label={`${item.name} (${item.value}%)`}
-                  size="small"
-                  sx={{ bgcolor: `${item.color}15`, color: item.color, fontWeight: 700, fontSize: '0.7rem', borderRadius: '8px' }}
-                />
-              ))}
+              {(() => {
+                const totalMous = distributionData.reduce((sum, item) => sum + item.value, 0);
+                return distributionData.map((item) => {
+                  const percentage = totalMous > 0 ? Math.round((item.value / totalMous) * 100) : 0;
+                  return (
+                    <Chip
+                      key={item.name}
+                      label={`${item.name} (${percentage}%)`}
+                      size="small"
+                      sx={{ bgcolor: `${item.color}15`, color: item.color, fontWeight: 700, fontSize: '0.7rem', borderRadius: '8px' }}
+                    />
+                  );
+                });
+              })()}
             </Box>
           </Card>
 
           {/* ── System Storage Widget ── */}
           <Card sx={{ p: 2.5, mb: 3, borderRadius: '20px', border: '1px solid', borderColor: 'divider' }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>Server Storage</Typography>
+              <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                {storageType === 'google_drive' ? 'Google Drive Storage' : 'Server Storage'}
+              </Typography>
               <StorageIcon sx={{ color: 'primary.main' }} />
             </Box>
 
             <Box sx={{ mb: 2 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.8 }}>
-                <Typography variant="caption" sx={{ fontWeight: 700 }}>Disk Usage</Typography>
+                <Typography variant="caption" sx={{ fontWeight: 700 }}>
+                  {storageType === 'google_drive' ? 'Google Drive Space' : 'Disk Usage'}
+                </Typography>
                 <Typography variant="caption" sx={{ fontWeight: 700, color: 'primary.main' }}>
-                  {fmtBytes(diskUsed)} / {fmtBytes(diskTotal)}
+                  {fmtBytes(diskUsed)} / {fmtBytes(diskTotal)} ({diskTotal > 0 ? ((diskUsed / diskTotal) * 100).toFixed(1) : '0.0'}%)
                 </Typography>
               </Box>
               <LinearProgress
                 variant="determinate"
-                value={pct(diskUsed, diskTotal) || 25}
+                value={diskTotal > 0 ? (diskUsed / diskTotal) * 100 : 0}
                 sx={{
                   height: 8,
                   borderRadius: 4,

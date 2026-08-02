@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { 
   Box, Grid, Card, CardContent, Typography, Button, IconButton, 
@@ -6,7 +6,8 @@ import {
   Paper, CircularProgress, Dialog, DialogTitle, DialogContent, 
   DialogActions, TextField, Menu, MenuItem, ListItemIcon, ListItemText,
   Alert, Divider, Chip, ToggleButtonGroup, ToggleButton, Switch, 
-  FormControlLabel, Autocomplete, FormControl, InputLabel, Select
+  FormControlLabel, Autocomplete, FormControl, InputLabel, Select,
+  LinearProgress
 } from '@mui/material';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import StatusPill from '../components/StatusPill';
@@ -30,6 +31,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import InfoIcon from '@mui/icons-material/Info';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
+import TimelineIcon from '@mui/icons-material/Timeline';
 
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -126,6 +128,17 @@ const FolderExplorer = () => {
   const [success, setSuccess] = useState(null);
   const [viewMode, setViewMode] = useState('list'); // 'list' or 'grid'
 
+  const activeFolderIdRef = useRef(currentFolderId);
+  const activeSearchQueryRef = useRef(searchParamQuery);
+
+  useEffect(() => {
+    activeFolderIdRef.current = currentFolderId;
+  }, [currentFolderId]);
+
+  useEffect(() => {
+    activeSearchQueryRef.current = searchParamQuery;
+  }, [searchParamQuery]);
+
   useEffect(() => {
     if (error) {
       const timer = setTimeout(() => setError(null), 5000);
@@ -177,6 +190,7 @@ const FolderExplorer = () => {
   const [auditDialogOpen, setAuditDialogOpen] = useState(false);
   const [auditData, setAuditData] = useState(null);
   const [auditLoading, setAuditLoading] = useState(false);
+  const [folderActivities, setFolderActivities] = useState([]);
 
   // Expiry Edit state in Registry Dialog
   const [isEditingExpiry, setIsEditingExpiry] = useState(false);
@@ -262,31 +276,68 @@ const FolderExplorer = () => {
       if (searchParamQuery) {
         // Search Results mode
         const res = await api.get(`/api/search/?q=${encodeURIComponent(searchParamQuery)}`);
+        if (currentFolderId !== activeFolderIdRef.current || searchParamQuery !== activeSearchQueryRef.current) return;
         setFolderData({ subfolders: res.data.folders, files: res.data.files });
         setCurrentFolder(null);
       } else if (currentFolderId === null) {
         // Root Directory
         const res = await api.get('/api/folders/root/');
+        if (currentFolderId !== activeFolderIdRef.current || searchParamQuery !== activeSearchQueryRef.current) return;
         setFolderData({ subfolders: res.data.subfolders, files: [] });
         setCurrentFolder(null);
       } else {
         // Inner Directory
         const res = await api.get(`/api/folders/${currentFolderId}/contents/`);
+        if (currentFolderId !== activeFolderIdRef.current || searchParamQuery !== activeSearchQueryRef.current) return;
         setFolderData(res.data);
         const folderRes = await api.get(`/api/folders/${currentFolderId}/`);
+        if (currentFolderId !== activeFolderIdRef.current || searchParamQuery !== activeSearchQueryRef.current) return;
         setCurrentFolder(folderRes.data);
       }
     } catch (err) {
+      if (currentFolderId !== activeFolderIdRef.current || searchParamQuery !== activeSearchQueryRef.current) return;
       console.error("Failed to load contents:", err);
       setError("Failed to retrieve directory contents. Check permissions.");
     } finally {
-      setLoading(false);
+      if (currentFolderId === activeFolderIdRef.current && searchParamQuery === activeSearchQueryRef.current) {
+        setLoading(false);
+      }
     }
   }, [currentFolderId, searchParamQuery, isFilteredView]);
 
   useEffect(() => {
     fetchContents();
   }, [fetchContents]);
+
+  // Background polling for dynamic updates (real-time updates of files/folders)
+  useEffect(() => {
+    const fetchContentsBackground = async () => {
+      if (isFilteredView) return;
+      try {
+        if (searchParamQuery) {
+          const res = await api.get(`/api/search/?q=${encodeURIComponent(searchParamQuery)}`);
+          if (currentFolderId !== activeFolderIdRef.current || searchParamQuery !== activeSearchQueryRef.current) return;
+          setFolderData({ subfolders: res.data.folders, files: res.data.files });
+        } else if (currentFolderId === null) {
+          const res = await api.get('/api/folders/root/');
+          if (currentFolderId !== activeFolderIdRef.current || searchParamQuery !== activeSearchQueryRef.current) return;
+          setFolderData({ subfolders: res.data.subfolders, files: [] });
+        } else {
+          const res = await api.get(`/api/folders/${currentFolderId}/contents/`);
+          if (currentFolderId !== activeFolderIdRef.current || searchParamQuery !== activeSearchQueryRef.current) return;
+          setFolderData(res.data);
+          const folderRes = await api.get(`/api/folders/${currentFolderId}/`);
+          if (currentFolderId !== activeFolderIdRef.current || searchParamQuery !== activeSearchQueryRef.current) return;
+          setCurrentFolder(folderRes.data);
+        }
+      } catch (err) {
+        console.error("Background content sync failed:", err);
+      }
+    };
+
+    const interval = setInterval(fetchContentsBackground, 5000); // sync every 5 seconds
+    return () => clearInterval(interval);
+  }, [currentFolderId, searchParamQuery, isFilteredView]);
 
   // Navigate folder helper
   const handleFolderClick = (folderId) => {
@@ -346,6 +397,20 @@ const FolderExplorer = () => {
     try {
       const res = await api.get(`/api/folders/${targetId}/audit/`);
       setAuditData(res.data);
+
+      const logsRes = await api.get('/api/activity-logs/');
+      const folderName = res.data.folder?.name;
+      const relatedLogs = logsRes.data.filter(l => 
+        (l.module === 'folders' || l.module === 'files') && 
+        (
+          l.action.includes(`'${folderName}'`) || 
+          l.action.includes(folderName) || 
+          l.action.includes(`folder ID: ${targetId}`) || 
+          l.action.includes(`folder_id': ${targetId}`) || 
+          l.action.includes(`folder_id: ${targetId}`)
+        )
+      );
+      setFolderActivities(relatedLogs);
     } catch (err) {
       console.error("Failed to load audit logs:", err);
       setError("Failed to load directory activity insights.");
@@ -443,20 +508,23 @@ const FolderExplorer = () => {
   const handleDeleteSubmit = async () => {
     const itemName = activeItem?.data?.name || "Item";
     const itemType = activeItem?.type === 'folder' ? 'Folder' : 'File';
+    setDeleteDialogOpen(false);
     setActionLoadingMessage(`Deleting ${itemType.toLowerCase()}...`);
     try {
+      // Small delay to ensure the delete animation is visible to the user
+      await new Promise(resolve => setTimeout(resolve, 1500));
       if (activeItem.type === 'folder') {
         await api.delete(`/api/folders/${activeItem.data.id}/`);
       } else {
         await api.delete(`/api/files/${activeItem.data.id}/`);
       }
-      setDeleteDialogOpen(false);
       setSuccess(`${itemType} "${itemName}" deleted successfully.`);
       fetchContents();
     } catch (err) {
       setError(err.response?.data?.detail || "Delete failed.");
     } finally {
       setActionLoadingMessage('');
+      setActiveItem(null);
     }
   };
 
@@ -1517,6 +1585,52 @@ const FolderExplorer = () => {
                 </Grid>
               </Card>
 
+              {/* Folder Activity Logs Timeline */}
+              <Box>
+                <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 800, mb: 1.5, display: 'flex', alignItems: 'center', gap: 1, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  <TimelineIcon sx={{ fontSize: 18 }} /> Folder Activity Logs ({folderActivities.length})
+                </Typography>
+                <Card variant="outlined" sx={{ p: 2.5, borderRadius: '16px', bgcolor: 'background.paper' }}>
+                  <Box sx={{ position: 'relative', pl: 1 }}>
+                    {folderActivities.length === 0 ? (
+                      <Typography variant="body2" color="text.secondary">No folder activity recorded yet.</Typography>
+                    ) : (
+                      folderActivities.map((log, idx) => (
+                        <Box 
+                          key={log.id} 
+                          sx={{ 
+                            position: 'relative', 
+                            mb: idx < folderActivities.length - 1 ? 2.5 : 0, 
+                            pl: 3, 
+                            borderLeft: idx < folderActivities.length - 1 ? '2px solid' : 'none', 
+                            borderLeftColor: 'divider' 
+                          }}
+                        >
+                          <Box sx={{
+                            position: 'absolute', 
+                            left: -5, 
+                            top: 2, 
+                            width: 8, 
+                            height: 8,
+                            borderRadius: '50%', 
+                            bgcolor: 'primary.main'
+                          }} />
+                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block' }}>
+                            {log.created_at ? new Date(log.created_at).toLocaleString() : 'N/A'}
+                          </Typography>
+                          <Typography variant="body2" sx={{ fontSize: '0.85rem', fontWeight: 600, mt: 0.5 }}>
+                            {log.action}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                            By: {log.user ? `${log.user.name} (${log.user.email})` : 'System'}
+                          </Typography>
+                        </Box>
+                      ))
+                    )}
+                  </Box>
+                </Card>
+              </Box>
+
               {/* Subfolder Ownership Registry */}
               <Box>
                 <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 800, mb: 1.5, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
@@ -1627,24 +1741,48 @@ const FolderExplorer = () => {
         }}
       >
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', p: 1 }}>
-          <Box sx={{ width: '100%', mb: 2.5, display: 'flex', justifyContent: 'center', alignItems: 'center', borderRadius: '16px', overflow: 'hidden' }}>
+          <Box sx={{ 
+            width: '100%', 
+            mb: 3, 
+            display: 'flex', 
+            justifyContent: 'center', 
+            alignItems: 'center', 
+            borderRadius: '20px', 
+            overflow: 'hidden',
+            bgcolor: '#f3f3f5', // perfectly match video background color
+            border: '1px solid rgba(0,0,0,0.04)',
+            height: '140px'
+          }}>
             <video
-              src="/loading_image.mp4"
+              key={actionLoadingMessage.toLowerCase().includes('delet') && actionLoadingMessage.toLowerCase().includes('folder') ? '/delete.mp4' : '/loading_image.mp4'}
+              src={actionLoadingMessage.toLowerCase().includes('delet') && actionLoadingMessage.toLowerCase().includes('folder') ? '/delete.mp4' : '/loading_image.mp4'}
               autoPlay
               loop
               muted
               playsInline
-              style={{ width: '80%', borderRadius: '16px', maxHeight: '130px', objectFit: 'contain' }}
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
             />
           </Box>
-          <Typography variant="h5" sx={{ fontWeight: 800, mb: 1.5, color: 'primary.main' }}>
+          <Typography 
+            variant="h5" 
+            sx={{ 
+              fontWeight: 800, 
+              mb: 1.5, 
+              color: actionLoadingMessage.toLowerCase().includes('delet') ? 'error.main' : 'primary.main' 
+            }}
+          >
             {actionLoadingMessage}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3, px: 2, lineHeight: 1.6 }}>
-            Please wait while the system updates your folders...
+            {actionLoadingMessage.toLowerCase().includes('delet') 
+              ? 'Please wait while the directory and its contents are safely removed.' 
+              : 'Please wait while the system updates your folders...'}
           </Typography>
-          <Box sx={{ width: '100%', mt: 2, display: 'flex', justifyContent: 'center' }}>
-            <CircularProgress size={24} />
+          <Box sx={{ width: '100%', mt: 1 }}>
+            <LinearProgress 
+              color={actionLoadingMessage.toLowerCase().includes('delet') ? 'error' : 'primary'} 
+              sx={{ borderRadius: '4px', height: '6px' }}
+            />
           </Box>
         </DialogContent>
       </Dialog>

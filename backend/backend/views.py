@@ -63,18 +63,28 @@ class DashboardStatsView(APIView):
         import shutil
         from django.conf import settings
         from django.db.models import Sum
+        from users.models import GoogleDriveSetting
 
         media_root = getattr(settings, 'MEDIA_ROOT', '')
         disk_total = 0
         disk_used = 0
         disk_free = 0
-        try:
-            usage = shutil.disk_usage(media_root if media_root else '.')
-            disk_total = usage.total
-            disk_used = usage.used
-            disk_free = usage.free
-        except Exception:
-            pass
+        storage_type = "local"
+
+        drive_setting = GoogleDriveSetting.objects.filter(is_active=True).first()
+        if drive_setting and drive_setting.connection_status == 'Connected':
+            disk_total = drive_setting.storage_limit or 0
+            disk_used = drive_setting.storage_usage or 0
+            disk_free = (disk_total - disk_used) if disk_total >= disk_used else 0
+            storage_type = "google_drive"
+        else:
+            try:
+                usage = shutil.disk_usage(media_root if media_root else '.')
+                disk_total = usage.total
+                disk_used = usage.used
+                disk_free = usage.free
+            except Exception:
+                pass
 
         # Per file-type breakdown from DB (in bytes)
         def bytes_for_types(qs, types):
@@ -208,6 +218,7 @@ class DashboardStatsView(APIView):
             "recent_activities": activities_data,
             "latest_notifications": notifications_serializer.data,
             "storage": {
+                "storage_type": storage_type,
                 "disk_total_bytes": disk_total,
                 "disk_used_bytes": disk_used,
                 "disk_free_bytes": disk_free,
