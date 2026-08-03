@@ -7,7 +7,7 @@ import {
   DialogActions, TextField, Menu, MenuItem, ListItemIcon, ListItemText,
   Alert, Divider, Chip, ToggleButtonGroup, ToggleButton, Switch, 
   FormControlLabel, Autocomplete, FormControl, InputLabel, Select,
-  LinearProgress
+  LinearProgress, Checkbox
 } from '@mui/material';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import StatusPill from '../components/StatusPill';
@@ -207,6 +207,29 @@ const FolderExplorer = () => {
   }, [fileDialogOpen, user]);
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedFolderIds, setSelectedFolderIds] = useState([]);
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+
+  // Reset selection when folder or search query changes
+  useEffect(() => {
+    setSelectedFolderIds([]);
+  }, [currentFolderId, searchParamQuery, isFilteredView]);
+
+  const handleToggleSelectFolder = (folderId) => {
+    setSelectedFolderIds(prev => 
+      prev.includes(folderId) 
+        ? prev.filter(id => id !== folderId) 
+        : [...prev, folderId]
+    );
+  };
+
+  const handleSelectAllFolders = () => {
+    if (selectedFolderIds.length === folderData.subfolders.length) {
+      setSelectedFolderIds([]);
+    } else {
+      setSelectedFolderIds(folderData.subfolders.map(f => f.id));
+    }
+  };
 
   const [accessDialogOpen, setAccessDialogOpen] = useState(false);
   const [accessList, setAccessList] = useState([]);
@@ -528,6 +551,25 @@ const FolderExplorer = () => {
     }
   };
 
+  const handleBulkDeleteSubmit = async () => {
+    setBulkDeleteDialogOpen(false);
+    setActionLoadingMessage(`Deleting ${selectedFolderIds.length} folders...`);
+    try {
+      // Small delay to ensure the delete animation is visible to the user
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      for (const folderId of selectedFolderIds) {
+        await api.delete(`/api/folders/${folderId}/`);
+      }
+      setSuccess(`${selectedFolderIds.length} folders deleted successfully.`);
+      setSelectedFolderIds([]);
+      fetchContents();
+    } catch (err) {
+      setError(err.response?.data?.detail || "Bulk delete failed.");
+    } finally {
+      setActionLoadingMessage('');
+    }
+  };
+
   // Download File Action
   const handleDownloadClick = async () => {
     handleMenuClose();
@@ -845,6 +887,17 @@ const FolderExplorer = () => {
       {/* Action Buttons Row */}
       {!isFilteredView && (
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1.5, mb: 3 }}>
+          {selectedFolderIds.length > 0 && hasPermission('delete_folder') && (
+            <Button
+              variant="contained"
+              color="error"
+              startIcon={<DeleteIcon />}
+              onClick={() => setBulkDeleteDialogOpen(true)}
+              sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700 }}
+            >
+              Delete Selected ({selectedFolderIds.length})
+            </Button>
+          )}
           {!searchParamQuery && currentFolder && (hasPermission('manage_users') || currentFolder.created_by?.id === user?.id) && (
             <Button
               variant="outlined"
@@ -1005,6 +1058,16 @@ const FolderExplorer = () => {
                               onDoubleClick={() => handleFolderClick(folder.id)}
                             >
                               {/* Absolute top actions menu */}
+                              {hasPermission('delete_folder') && (
+                                <Box sx={{ position: 'absolute', top: 8, left: 8, zIndex: 2 }} onClick={(e) => e.stopPropagation()}>
+                                  <Checkbox
+                                    checked={selectedFolderIds.includes(folder.id)}
+                                    onChange={() => handleToggleSelectFolder(folder.id)}
+                                    size="small"
+                                    sx={{ p: 0.5 }}
+                                  />
+                                </Box>
+                              )}
                               <IconButton 
                                 size="small" 
                                 onClick={(e) => handleMenuOpen(e, folder, 'folder')} 
@@ -1057,6 +1120,21 @@ const FolderExplorer = () => {
                       <Table size="small">
                         <TableHead sx={{ bgcolor: (theme) => theme.palette.mode === 'dark' ? '#1e293b' : '#f8fafc' }}>
                           <TableRow>
+                            {hasPermission('delete_folder') && (
+                              <TableCell padding="checkbox">
+                                <Checkbox
+                                  indeterminate={
+                                    selectedFolderIds.length > 0 &&
+                                    selectedFolderIds.length < folderData.subfolders.length
+                                  }
+                                  checked={
+                                    folderData.subfolders.length > 0 &&
+                                    selectedFolderIds.length === folderData.subfolders.length
+                                  }
+                                  onChange={handleSelectAllFolders}
+                                />
+                              </TableCell>
+                            )}
                             <TableCell sx={{ fontWeight: 700, py: 1.5 }}>Folder Name</TableCell>
                             <TableCell sx={{ fontWeight: 700 }}>Creator / Owner</TableCell>
                             <TableCell sx={{ fontWeight: 700 }}>Last Modified</TableCell>
@@ -1066,57 +1144,69 @@ const FolderExplorer = () => {
                           </TableRow>
                         </TableHead>
                         <TableBody>
-                          {folderData.subfolders.map((folder) => (
-                            <TableRow 
-                              key={folder.id} 
-                              hover 
-                              onDoubleClick={() => handleFolderClick(folder.id)}
-                              style={{ cursor: 'pointer' }}
-                            >
-                              <TableCell sx={{ py: 1.5 }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                                  <FolderIcon sx={{ color: getDynamicFolderColor(folder), fontSize: 24 }} />
-                                  <Box>
-                                    <Typography variant="body2" sx={{ fontWeight: 600 }}>{folder.name}</Typography>
-                                    {folder.summary && (
-                                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontStyle: 'italic', fontSize: '0.72rem' }}>
-                                        {folder.summary}
-                                      </Typography>
-                                    )}
+                          {folderData.subfolders.map((folder) => {
+                            const isSelected = selectedFolderIds.includes(folder.id);
+                            return (
+                              <TableRow 
+                                key={folder.id} 
+                                hover 
+                                onDoubleClick={() => handleFolderClick(folder.id)}
+                                style={{ cursor: 'pointer' }}
+                                selected={isSelected}
+                              >
+                                {hasPermission('delete_folder') && (
+                                  <TableCell padding="checkbox" onClick={(e) => e.stopPropagation()}>
+                                    <Checkbox
+                                      checked={isSelected}
+                                      onChange={() => handleToggleSelectFolder(folder.id)}
+                                    />
+                                  </TableCell>
+                                )}
+                                <TableCell sx={{ py: 1.5 }}>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                    <FolderIcon sx={{ color: getDynamicFolderColor(folder), fontSize: 24 }} />
+                                    <Box>
+                                      <Typography variant="body2" sx={{ fontWeight: 600 }}>{folder.name}</Typography>
+                                      {folder.summary && (
+                                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontStyle: 'italic', fontSize: '0.72rem' }}>
+                                          {folder.summary}
+                                        </Typography>
+                                      )}
+                                    </Box>
                                   </Box>
-                                </Box>
-                              </TableCell>
-                              <TableCell>{folder.created_by?.name || 'System'}</TableCell>
-                              <TableCell>{new Date(folder.updated_at).toLocaleDateString()}</TableCell>
-                              <TableCell>
-                                <Chip 
-                                  label={getDynamicFolderLabel(folder)} 
-                                  size="small" 
-                                  sx={{ 
-                                    fontSize: '0.7rem', 
-                                    height: 20, 
-                                    fontWeight: 700, 
-                                    color: getDynamicFolderColor(folder), 
-                                    bgcolor: `${getDynamicFolderColor(folder)}12`, 
-                                    border: '1px solid',
-                                    borderColor: `${getDynamicFolderColor(folder)}24`,
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.5px'
-                                  }} 
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
-                                  {folder.file_count} files • {folder.subfolder_count} folders
-                                </Typography>
-                              </TableCell>
-                              <TableCell align="right" onClick={(e) => e.stopPropagation()}>
-                                <IconButton size="small" onClick={(e) => handleMenuOpen(e, folder, 'folder')}>
-                                  <MoreVertIcon fontSize="small" />
-                                </IconButton>
-                              </TableCell>
-                            </TableRow>
-                          ))}
+                                </TableCell>
+                                <TableCell>{folder.created_by?.name || 'System'}</TableCell>
+                                <TableCell>{new Date(folder.updated_at).toLocaleDateString()}</TableCell>
+                                <TableCell>
+                                  <Chip 
+                                    label={getDynamicFolderLabel(folder)} 
+                                    size="small" 
+                                    sx={{ 
+                                      fontSize: '0.7rem', 
+                                      height: 20, 
+                                      fontWeight: 700, 
+                                      color: getDynamicFolderColor(folder), 
+                                      bgcolor: `${getDynamicFolderColor(folder)}12`, 
+                                      border: '1px solid',
+                                      borderColor: `${getDynamicFolderColor(folder)}24`,
+                                      textTransform: 'uppercase',
+                                      letterSpacing: '0.5px'
+                                    }} 
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
+                                    {folder.file_count} files • {folder.subfolder_count} folders
+                                  </Typography>
+                                </TableCell>
+                                <TableCell align="right" onClick={(e) => e.stopPropagation()}>
+                                  <IconButton size="small" onClick={(e) => handleMenuOpen(e, folder, 'folder')}>
+                                    <MoreVertIcon fontSize="small" />
+                                  </IconButton>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
                         </TableBody>
                       </Table>
                     </TableContainer>
@@ -1462,6 +1552,20 @@ const FolderExplorer = () => {
         <DialogActions>
           <Button onClick={() => { setDeleteDialogOpen(false); setActiveItem(null); }}>Cancel</Button>
           <Button onClick={handleDeleteSubmit} color="error" variant="contained">Delete</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <Dialog open={bulkDeleteDialogOpen} onClose={() => setBulkDeleteDialogOpen(false)}>
+        <DialogTitle sx={{ fontWeight: 800 }}>Confirm Bulk Delete</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1">
+            Are you sure you want to permanently delete the <strong>{selectedFolderIds.length}</strong> selected folders and all of their contents? This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBulkDeleteDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleBulkDeleteSubmit} color="error" variant="contained">Delete All</Button>
         </DialogActions>
       </Dialog>
 
