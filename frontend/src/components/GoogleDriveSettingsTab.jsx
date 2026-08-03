@@ -90,7 +90,8 @@ const GoogleDriveSettingsTab = () => {
     setError(null);
     setSuccess(null);
     try {
-      const response = await api.get(`/api/google-drive/oauth-url/?force_select=${forceSelect}`);
+      const redirectUri = `${window.location.origin}/settings`;
+      const response = await api.get(`/api/google-drive/oauth-url/?redirect_uri=${encodeURIComponent(redirectUri)}&force_select=${forceSelect}`);
       if (response.data.url) {
         window.location.href = response.data.url;
       } else {
@@ -254,7 +255,7 @@ const GoogleDriveSettingsTab = () => {
       ) : showDetailCard ? (
         <Grid container spacing={3.5}>
           {/* Main Info Card */}
-          <Grid item xs={12}>
+          <Grid xs={12}>
             <Card sx={{ borderRadius: '20px', border: '1px solid', borderColor: 'divider', boxShadow: 'none' }}>
               <CardContent sx={{ p: 4, display: 'flex', flexDirection: 'column', gap: 3.5 }}>
                 {/* Header profile row */}
@@ -282,7 +283,7 @@ const GoogleDriveSettingsTab = () => {
 
                 {/* Form fields grid */}
                 <Grid container spacing={2.5}>
-                  <Grid item xs={12} sm={6}>
+                  <Grid xs={12} sm={6}>
                     <TextField
                       fullWidth
                       label="Status"
@@ -291,7 +292,7 @@ const GoogleDriveSettingsTab = () => {
                       sx={{ '& .MuiInputBase-input.Mui-disabled': { WebkitTextFillColor: 'text.primary', fontWeight: 600 } }}
                     />
                   </Grid>
-                  <Grid item xs={12} sm={6}>
+                  <Grid xs={12} sm={6}>
                     <TextField
                       fullWidth
                       label="Connected Google Account"
@@ -300,7 +301,7 @@ const GoogleDriveSettingsTab = () => {
                       sx={{ '& .MuiInputBase-input.Mui-disabled': { WebkitTextFillColor: 'text.primary', fontWeight: 600 } }}
                     />
                   </Grid>
-                  <Grid item xs={12} sm={6}>
+                  <Grid xs={12} sm={6}>
                     <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
                       <TextField
                         fullWidth
@@ -332,7 +333,7 @@ const GoogleDriveSettingsTab = () => {
                       </Button>
                     </Box>
                   </Grid>
-                  <Grid item xs={12} sm={6}>
+                  <Grid xs={12} sm={6}>
                     <TextField
                       fullWidth
                       label="Default Upload Folder"

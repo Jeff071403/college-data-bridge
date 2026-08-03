@@ -127,7 +127,8 @@ class GoogleDriveViewSet(viewsets.ViewSet):
         if not client_id:
             return Response({"detail": "Google Client ID is not configured on the server"}, status=status.HTTP_400_BAD_REQUEST)
 
-        redirect_uri = get_oauth_redirect_uri(getattr(settings, 'GOOGLE_OAUTH_REDIRECT_URI', 'http://localhost:8000/api/google-drive/oauth/callback/'))
+        req_redirect = request.query_params.get('redirect_uri')
+        redirect_uri = get_oauth_redirect_uri(req_redirect or getattr(settings, 'GOOGLE_OAUTH_REDIRECT_URI', 'http://localhost:8000/api/google-drive/oauth/callback/'))
         if not redirect_uri:
             return Response({"detail": "GOOGLE_OAUTH_REDIRECT_URI settings is required"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
