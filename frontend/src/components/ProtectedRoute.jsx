@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { Box, Typography, Button } from '@mui/material';
 import LockPersonIcon from '@mui/icons-material/LockPerson';
 
-const ProtectedRoute = ({ children, requiredPermission, blockUserRole }) => {
+const ProtectedRoute = ({ children, requiredPermission, blockUserRole, onlySuperAdmin }) => {
   const { user, loading, hasPermission } = useAuth();
 
   if (loading) {
@@ -16,6 +16,10 @@ const ProtectedRoute = ({ children, requiredPermission, blockUserRole }) => {
   }
 
   if (blockUserRole && user.role?.name?.toLowerCase() === 'user') {
+    return <Navigate to="/" replace />;
+  }
+
+  if (onlySuperAdmin && user.role?.name !== 'Super Admin') {
     return <Navigate to="/" replace />;
   }
 

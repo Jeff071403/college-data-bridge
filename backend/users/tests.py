@@ -656,3 +656,43 @@ class WebOAuthIntegrationTests(TestCase):
         setting.refresh_from_db()
         self.assertEqual(setting.root_folder_id, '1v5kj8M_Ll2RXZaQuBJGoSWhq1IYb7n9u')
 
+    def test_database_encryption_mechanism(self):
+        from users.models import SMTPSetting, GoogleDriveSetting
+        from django.db import connection
+
+        # Test SMTP setting password encryption
+        smtp = SMTPSetting.objects.create(
+            sender_email="test_secure_smtp@test.com",
+            password="my_super_secret_smtp_password"
+        )
+        # Verify it transparently decrypts
+        self.assertEqual(smtp.password, "my_super_secret_smtp_password")
+
+        # Verify that it is stored encrypted in the database
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT password FROM users_smtpsetting WHERE id = %s", [smtp.id])
+            row = cursor.fetchone()
+            db_value = row[0]
+            self.assertNotEqual(db_value, "my_super_secret_smtp_password")
+            self.assertTrue(db_value.startswith("gAAAAA"))
+
+        # Test Google Drive credentials encryption
+        drive = GoogleDriveSetting.objects.create(
+            project_id="test_proj",
+            private_key="my_super_secret_private_key",
+            client_secret="my_super_secret_client_secret"
+        )
+        # Verify it transparently decrypts
+        self.assertEqual(drive.private_key, "my_super_secret_private_key")
+        self.assertEqual(drive.client_secret, "my_super_secret_client_secret")
+
+        # Verify that it is stored encrypted in the database
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT private_key, client_secret FROM users_googledrivesetting WHERE id = %s", [drive.id])
+            row = cursor.fetchone()
+            db_private_key, db_client_secret = row
+            self.assertNotEqual(db_private_key, "my_super_secret_private_key")
+            self.assertTrue(db_private_key.startswith("gAAAAA"))
+            self.assertNotEqual(db_client_secret, "my_super_secret_client_secret")
+            self.assertTrue(db_client_secret.startswith("gAAAAA"))
+

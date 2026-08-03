@@ -134,3 +134,36 @@ class CustomTimeMiddleware:
             return response
         finally:
             clear_simulated_time()
+
+
+class SecurityHeadersMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+
+        # Essential security headers
+        response['X-Content-Type-Options'] = 'nosniff'
+        response['X-Frame-Options'] = 'DENY'
+        response['X-XSS-Protection'] = '1; mode=block'
+        response['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        response['Permissions-Policy'] = 'geolocation=(), camera=(), microphone=()'
+
+        # Content Security Policy (CSP)
+        csp_directives = [
+            "default-src 'self'",
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+            "style-src 'self' 'unsafe-inline'",
+            "img-src 'self' data: https:",
+            "connect-src 'self' https: http://localhost:8000 http://127.0.0.1:8000 ws://localhost:5173 http://localhost:5173",
+            "font-src 'self' data: https:",
+            "object-src 'none'",
+            "media-src 'self'",
+            "frame-ancestors 'none'",
+            "base-uri 'self'",
+            "form-action 'self'",
+        ]
+        response['Content-Security-Policy'] = "; ".join(csp_directives)
+
+        return response

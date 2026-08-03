@@ -120,7 +120,7 @@ function App() {
             <Route
               path="/settings"
               element={
-                <ProtectedRoute requiredPermission="view_dashboard" blockUserRole={true}>
+                <ProtectedRoute requiredPermission="view_dashboard" onlySuperAdmin={true}>
                   <Layout><Settings /></Layout>
                 </ProtectedRoute>
               }

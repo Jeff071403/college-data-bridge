@@ -41,6 +41,12 @@ class File(models.Model):
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    
+    # Security & Integrity Fields
+    sha256_hash = models.CharField(max_length=64, blank=True, null=True)
+    virus_scan_status = models.CharField(max_length=50, default='Pending')
+    encrypted = models.BooleanField(default=True)
+    encryption_key_id = models.CharField(max_length=100, default='Google-Drive-AES-256')
 
     def __str__(self):
         return f"{self.name} (v{self.version_number})"
@@ -66,6 +72,12 @@ class FileVersion(models.Model):
         related_name='uploaded_file_versions'
     )
     created_at = models.DateTimeField(auto_now_add=True)
+
+    # Security & Integrity Fields
+    sha256_hash = models.CharField(max_length=64, blank=True, null=True)
+    virus_scan_status = models.CharField(max_length=50, default='Pending')
+    encrypted = models.BooleanField(default=True)
+    encryption_key_id = models.CharField(max_length=100, default='Google-Drive-AES-256')
 
     class Meta:
         ordering = ['-version_number']

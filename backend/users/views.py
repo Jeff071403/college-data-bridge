@@ -133,6 +133,12 @@ class UserViewSet(viewsets.ModelViewSet):
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
         email = instance.email
+        
+        # Nullify activity log references directly via queryset update
+        # to bypass ActivityLog.save() immutability guard
+        from activity_logs.models import ActivityLog
+        ActivityLog.objects.filter(user=instance).update(user=None)
+        
         self.perform_destroy(instance)
         log_activity(request.user, f"Deleted user {email}", "users", request)
         return Response(status=status.HTTP_204_NO_CONTENT)

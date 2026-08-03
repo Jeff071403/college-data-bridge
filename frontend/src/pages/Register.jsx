@@ -303,13 +303,15 @@ const Register = () => {
               <TextField
                 label="Email Address"
                 value={invitation?.email || ''}
-                InputProps={{
-                  readOnly: true,
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <EmailIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
-                    </InputAdornment>
-                  )
+                slotProps={{
+                  input: {
+                    readOnly: true,
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <EmailIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
+                      </InputAdornment>
+                    )
+                  }
                 }}
                 disabled
                 fullWidth
@@ -323,12 +325,14 @@ const Register = () => {
                 onChange={e => setName(e.target.value)}
                 required
                 fullWidth
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <PersonIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
-                    </InputAdornment>
-                  )
+                slotProps={{
+                  input: {
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <PersonIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
+                      </InputAdornment>
+                    )
+                  }
                 }}
               />
 
@@ -339,12 +343,14 @@ const Register = () => {
                 value={designation}
                 onChange={e => setDesignation(e.target.value)}
                 fullWidth
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <BadgeIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
-                    </InputAdornment>
-                  )
+                slotProps={{
+                  input: {
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <BadgeIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
+                      </InputAdornment>
+                    )
+                  }
                 }}
               />
 
@@ -355,12 +361,14 @@ const Register = () => {
                 value={phone}
                 onChange={e => setPhone(e.target.value)}
                 fullWidth
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <PhoneIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
-                    </InputAdornment>
-                  )
+                slotProps={{
+                  input: {
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <PhoneIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
+                      </InputAdornment>
+                    )
+                  }
                 }}
               />
 
@@ -371,12 +379,14 @@ const Register = () => {
                 value={companyName}
                 onChange={e => setCompanyName(e.target.value)}
                 fullWidth
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <BusinessIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
-                    </InputAdornment>
-                  )
+                slotProps={{
+                  input: {
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <BusinessIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
+                      </InputAdornment>
+                    )
+                  }
                 }}
               />
 
@@ -421,19 +431,21 @@ const Register = () => {
                 onChange={e => setPassword(e.target.value)}
                 required
                 fullWidth
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <LockIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
-                    </InputAdornment>
-                  ),
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton onClick={() => setShowPassword(!showPassword)} edge="end">
-                        {showPassword ? <VisibilityOff /> : <Visibility />}
-                      </IconButton>
-                    </InputAdornment>
-                  )
+                slotProps={{
+                  input: {
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <LockIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
+                      </InputAdornment>
+                    ),
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton onClick={() => setShowPassword(!showPassword)} edge="end">
+                          {showPassword ? <VisibilityOff /> : <Visibility />}
+                        </IconButton>
+                      </InputAdornment>
+                    )
+                  }
                 }}
               />
 
@@ -445,12 +457,14 @@ const Register = () => {
                 onChange={e => setConfirmPassword(e.target.value)}
                 required
                 fullWidth
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <LockIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
-                    </InputAdornment>
-                  )
+                slotProps={{
+                  input: {
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <LockIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
+                      </InputAdornment>
+                    )
+                  }
                 }}
               />
 

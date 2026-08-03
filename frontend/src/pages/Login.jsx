@@ -206,12 +206,14 @@ const Login = () => {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   fullWidth
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <EmailIcon fontSize="small" sx={{ color: 'text.secondary' }} />
-                      </InputAdornment>
-                    ),
+                  slotProps={{
+                    input: {
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <EmailIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                        </InputAdornment>
+                      ),
+                    }
                   }}
                   sx={{
                     '& .MuiOutlinedInput-root': {
@@ -229,23 +231,25 @@ const Login = () => {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   fullWidth
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <LockIcon fontSize="small" sx={{ color: 'text.secondary' }} />
-                      </InputAdornment>
-                    ),
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <IconButton
-                          aria-label="toggle password visibility"
-                          onClick={() => setShowPassword(!showPassword)}
-                          edge="end"
-                        >
-                          {showPassword ? <VisibilityOff /> : <Visibility />}
-                        </IconButton>
-                      </InputAdornment>
-                    ),
+                  slotProps={{
+                    input: {
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <LockIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                        </InputAdornment>
+                      ),
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            aria-label="toggle password visibility"
+                            onClick={() => setShowPassword(!showPassword)}
+                            edge="end"
+                          >
+                            {showPassword ? <VisibilityOff /> : <Visibility />}
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    }
                   }}
                   sx={{
                     '& .MuiOutlinedInput-root': {

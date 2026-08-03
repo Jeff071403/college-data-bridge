@@ -373,7 +373,8 @@ const Layout = ({ children }) => {
       <List sx={{ px: 0.5, py: 0.5, flexGrow: 1, overflowY: 'auto', overflowX: 'hidden' }}>
         {menuItems.map((item) => {
           if (item.permission && !hasPermission(item.permission)) return null;
-          if (['/users', '/departments', '/settings'].includes(item.path) && user?.role?.name?.toLowerCase() === 'user') return null;
+          if (item.path === '/settings' && user?.role?.name !== 'Super Admin') return null;
+          if (['/users', '/departments'].includes(item.path) && user?.role?.name?.toLowerCase() === 'user') return null;
           const isSelected = location.pathname === item.path;
           return (
             <ListItem key={item.text} disablePadding sx={{ mb: 0.25 }}>
