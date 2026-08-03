@@ -155,16 +155,33 @@ const SuperAdminDashboard = ({ stats, user, navigate, setPreviewFile }) => {
             <Button
               variant="contained"
               onClick={() => navigate('/users')}
-              sx={{ bgcolor: '#ffffff', color: '#4F46E5', fontWeight: 800, px: 2.5, py: 1, borderRadius: '12px', '&:hover': { bgcolor: '#f8fafc', transform: 'translateY(-1px)' } }}
-              startIcon={<ManageAccountsIcon />}
+              sx={{
+                bgcolor: '#ffffff !important',
+                color: '#4F46E5 !important',
+                fontWeight: 800,
+                px: 2.5,
+                py: 1,
+                borderRadius: '12px',
+                boxShadow: '0 4px 14px rgba(0,0,0,0.18) !important',
+                '&:hover': { bgcolor: '#f8fafc !important', color: '#4F46E5 !important', transform: 'translateY(-1px)' }
+              }}
+              startIcon={<ManageAccountsIcon sx={{ color: '#4F46E5 !important' }} />}
             >
               Manage Users
             </Button>
             <Button
               variant="outlined"
               onClick={() => navigate('/settings')}
-              sx={{ borderColor: 'rgba(255,255,255,0.5)', color: '#fff', fontWeight: 700, px: 2.5, py: 1, borderRadius: '12px', '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,0.12)' } }}
-              startIcon={<SettingsIcon />}
+              sx={{
+                borderColor: 'rgba(255,255,255,0.7) !important',
+                color: '#ffffff !important',
+                fontWeight: 700,
+                px: 2.5,
+                py: 1,
+                borderRadius: '12px',
+                '&:hover': { borderColor: '#ffffff !important', bgcolor: 'rgba(255,255,255,0.15) !important' }
+              }}
+              startIcon={<SettingsIcon sx={{ color: '#ffffff !important' }} />}
             >
               System Settings
             </Button>
@@ -884,35 +901,12 @@ const Dashboard = () => {
         </Alert>
       )}
 
-      {/* Super Admin Role Switcher Tabs */}
-      {isSuperAdmin && (
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5, pb: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
-          <Typography variant="caption" sx={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'text.secondary' }}>
-            Dashboard View Switcher:
-          </Typography>
-          <Tabs
-            value={activeRoleTab}
-            onChange={(e, val) => setActiveRoleTab(val)}
-            sx={{
-              minHeight: 36,
-              '& .MuiTab-root': { py: 0.5, px: 2, minHeight: 36, fontWeight: 800, fontSize: '0.78rem', borderRadius: '10px' }
-            }}
-          >
-            <Tab value="Super Admin" label="Super Admin Dashboard" />
-            <Tab value="Admin" label="Admin Dashboard" />
-            <Tab value="User" label="User Dashboard" />
-          </Tabs>
-        </Box>
-      )}
-
-      {/* Render Role Specific Dashboard */}
-      {activeRoleTab === 'Super Admin' && (
+      {/* Render Role-Specific Dashboard directly based on logged-in user role */}
+      {userRole === 'Super Admin' ? (
         <SuperAdminDashboard stats={stats} user={user} navigate={navigate} setPreviewFile={setPreviewFile} />
-      )}
-      {activeRoleTab === 'Admin' && (
+      ) : (userRole === 'Admin' || userRole === 'Lawyer / MOU Administrator') ? (
         <AdminDashboard stats={stats} user={user} navigate={navigate} setPreviewFile={setPreviewFile} />
-      )}
-      {activeRoleTab === 'User' && (
+      ) : (
         <UserDashboard stats={stats} user={user} navigate={navigate} setPreviewFile={setPreviewFile} />
       )}
 
