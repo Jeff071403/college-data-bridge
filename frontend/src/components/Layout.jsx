@@ -565,19 +565,21 @@ const Layout = ({ children }) => {
                 },
                 '& input': { cursor: 'pointer' }
               }}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon fontSize="small" sx={{ color: 'text.secondary' }} />
-                  </InputAdornment>
-                ),
-                endAdornment: (
-                  <InputAdornment position="end" sx={{ display: { xs: 'none', sm: 'flex' } }}>
-                    <Typography variant="caption" sx={{ bgcolor: 'action.hover', border: '1px solid', borderColor: 'divider', px: 1, py: 0.25, borderRadius: '6px', fontSize: '0.68rem', fontWeight: 700, color: 'text.secondary', fontFamily: 'monospace' }}>
-                      Ctrl + K
-                    </Typography>
-                  </InputAdornment>
-                )
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                    </InputAdornment>
+                  ),
+                  endAdornment: (
+                    <InputAdornment position="end" sx={{ display: { xs: 'none', sm: 'flex' } }}>
+                      <Typography variant="caption" sx={{ bgcolor: 'action.hover', border: '1px solid', borderColor: 'divider', px: 1, py: 0.25, borderRadius: '6px', fontSize: '0.68rem', fontWeight: 700, color: 'text.secondary', fontFamily: 'monospace' }}>
+                        Ctrl + K
+                      </Typography>
+                    </InputAdornment>
+                  )
+                }
               }}
             />
           </Box>

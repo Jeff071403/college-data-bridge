@@ -989,7 +989,7 @@ const Settings = () => {
             onChange={(_, v) => setActiveTab(v)}
             variant="scrollable"
             scrollButtons="auto"
-            TabIndicatorProps={{ sx: { height: 3, borderRadius: '3px 3px 0 0' } }}
+            slotProps={{ indicator: { sx: { height: 3, borderRadius: '3px 3px 0 0' } } }}
           >
             <Tab icon={<PaletteIcon fontSize="small" />} iconPosition="start" label="Appearance" sx={tabSx} />
             <Tab icon={<SettingsSuggestIcon fontSize="small" />} iconPosition="start" label="Master Data Config" sx={tabSx} />
