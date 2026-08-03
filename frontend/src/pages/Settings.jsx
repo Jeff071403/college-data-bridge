@@ -477,6 +477,17 @@ const MasterList = ({ icon, title, color, fetchFn, createFn, updateFn, deleteFn,
 
 
 // ── Email Settings Component for Super Admin ─────────────────────────────────
+const SMTP_PROVIDERS = [
+  { label: 'Google Gmail (smtp.gmail.com)', host: 'smtp.gmail.com', port: 587, useTls: true, useSsl: false },
+  { label: 'Outlook / Hotmail / Live (smtp.office365.com)', host: 'smtp.office365.com', port: 587, useTls: true, useSsl: false },
+  { label: 'Microsoft 365 (smtp.office365.com)', host: 'smtp.office365.com', port: 587, useTls: true, useSsl: false },
+  { label: 'Yahoo Mail (TLS - Port 587)', host: 'smtp.mail.yahoo.com', port: 587, useTls: true, useSsl: false },
+  { label: 'Yahoo Mail (SSL - Port 465)', host: 'smtp.mail.yahoo.com', port: 465, useTls: false, useSsl: true },
+  { label: 'Zoho Mail (smtp.zoho.com)', host: 'smtp.zoho.com', port: 587, useTls: true, useSsl: false },
+  { label: 'SendGrid (smtp.sendgrid.net)', host: 'smtp.sendgrid.net', port: 587, useTls: true, useSsl: false },
+  { label: 'Custom SMTP Server', host: '', port: 587, useTls: true, useSsl: false },
+];
+
 const EmailSettingsTab = () => {
   const [smtpList, setSmtpList] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -489,7 +500,8 @@ const EmailSettingsTab = () => {
 
   // Form states
   const [editingId, setEditingId] = useState(null);
-  const [host, setHost] = useState('');
+  const [selectedProvider, setSelectedProvider] = useState(SMTP_PROVIDERS[0].label);
+  const [host, setHost] = useState('smtp.gmail.com');
   const [port, setPort] = useState(587);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -503,6 +515,18 @@ const EmailSettingsTab = () => {
   const [testingConnection, setTestingConnection] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [authRequired, setAuthRequired] = useState(true);
+
+  const handleProviderChange = (e) => {
+    const pName = e.target.value;
+    setSelectedProvider(pName);
+    const preset = SMTP_PROVIDERS.find(p => p.label === pName);
+    if (preset && preset.label !== 'Custom SMTP Server') {
+      setHost(preset.host);
+      setPort(preset.port);
+      setUseTls(preset.useTls);
+      setUseSsl(preset.useSsl);
+    }
+  };
 
   const fetchSettings = useCallback(async () => {
     setLoading(true);
@@ -523,6 +547,7 @@ const EmailSettingsTab = () => {
 
   const handleOpenAdd = () => {
     setEditingId(null);
+    setSelectedProvider(SMTP_PROVIDERS[0].label);
     setHost('smtp.gmail.com');
     setPort(587);
     setUsername('');
@@ -537,6 +562,8 @@ const EmailSettingsTab = () => {
 
   const handleOpenEdit = (smtp) => {
     setEditingId(smtp.id);
+    const matchingPreset = SMTP_PROVIDERS.find(p => p.host === smtp.host && p.port === Number(smtp.port));
+    setSelectedProvider(matchingPreset ? matchingPreset.label : 'Custom SMTP Server');
     setHost(smtp.host);
     setPort(smtp.port);
     setUsername(smtp.username || '');
@@ -734,6 +761,24 @@ const EmailSettingsTab = () => {
           {editingId ? 'Edit SMTP Configuration' : 'Add SMTP Configuration'}
         </DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, pt: 1.5 }}>
+          {/* SMTP Provider Select Dropdown */}
+          <FormControl fullWidth>
+            <InputLabel id="smtp-provider-select-label" sx={{ fontWeight: 700 }}>SMTP Mail Provider Preset</InputLabel>
+            <Select
+              labelId="smtp-provider-select-label"
+              value={selectedProvider}
+              label="SMTP Mail Provider Preset"
+              onChange={handleProviderChange}
+              sx={{ borderRadius: '10px' }}
+            >
+              {SMTP_PROVIDERS.map((provider) => (
+                <MenuItem key={provider.label} value={provider.label} sx={{ fontWeight: 600 }}>
+                  {provider.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
           {/* Host & Port Row */}
           <Box sx={{ display: 'flex', gap: 2 }}>
             <TextField
@@ -741,7 +786,10 @@ const EmailSettingsTab = () => {
               label="SMTP Host"
               required
               value={host}
-              onChange={e => setHost(e.target.value)}
+              onChange={e => {
+                setHost(e.target.value);
+                setSelectedProvider('Custom SMTP Server');
+              }}
             />
             <TextField
               sx={{ flex: 1 }}
