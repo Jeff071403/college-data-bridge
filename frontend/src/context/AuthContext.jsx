@@ -67,6 +67,29 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Google Login handler
+  const googleLogin = async (googlePayload) => {
+    setLoading(true);
+    try {
+      const payload = typeof googlePayload === 'string' 
+        ? { credential: googlePayload } 
+        : googlePayload;
+      const response = await api.post('/api/users/auth/google/', payload);
+      const { access, refresh, user: loggedUser } = response.data;
+
+      localStorage.setItem('access_token', access);
+      localStorage.setItem('refresh_token', refresh);
+      localStorage.setItem('user', JSON.stringify(loggedUser));
+      setUser(loggedUser);
+      return loggedUser;
+    } catch (error) {
+      setLoading(false);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Logout handler
   const logout = () => {
     localStorage.removeItem('access_token');
@@ -90,6 +113,7 @@ export const AuthProvider = ({ children }) => {
     user,
     loading,
     login,
+    googleLogin,
     logout,
     hasPermission,
     refreshUser: fetchCurrentUser

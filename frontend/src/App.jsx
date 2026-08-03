@@ -26,13 +26,17 @@ import Settings from './pages/Settings';
 import Register from './pages/Register';
 
 import { SiteTimeProvider } from './context/SiteTimeContext';
+import { GoogleOAuthProvider } from '@react-oauth/google';
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "866710282157-aincjobm1nnsfaj9g4sl8eihvhoai365.apps.googleusercontent.com";
 
 function App() {
   return (
-    <Router>
-      <ThemeModeProvider>
-        <SiteTimeProvider>
-          <AuthProvider>
+    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+      <Router>
+        <ThemeModeProvider>
+          <SiteTimeProvider>
+            <AuthProvider>
             <Routes>
             {/* Public Login & Register Pages */}
             <Route path="/login" element={<Login />} />
@@ -178,6 +182,7 @@ function App() {
       </SiteTimeProvider>
     </ThemeModeProvider>
   </Router>
+</GoogleOAuthProvider>
 );
 }
 

@@ -56,6 +56,117 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
 
 
+from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import RefreshToken
+from google.oauth2 import id_token as google_id_token
+from google.auth.transport import requests as google_requests
+import requests as py_requests
+
+class GoogleLoginView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        credential = request.data.get('credential') or request.data.get('token') or request.data.get('id_token')
+        access_token = request.data.get('access_token')
+
+        if not credential and not access_token:
+            return Response({"detail": "Google credential or token is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        client_id = getattr(settings, 'GOOGLE_OAUTH_CLIENT_ID', '')
+        if not client_id:
+            from .views_google_drive import get_oauth_credentials
+            client_id, _ = get_oauth_credentials()
+
+        email = None
+        name = None
+        email_verified = True
+
+        # 1. Verify Google ID Token (credential)
+        if credential:
+            try:
+                # Primary verification using google-auth library
+                id_info = google_id_token.verify_oauth2_token(
+                    credential, 
+                    google_requests.Request(), 
+                    audience=client_id if client_id else None
+                )
+                email = id_info.get('email')
+                name = id_info.get('name')
+                email_verified = id_info.get('email_verified', True)
+            except Exception as e:
+                logger.warning(f"google-auth verify_oauth2_token failed: {e}. Trying Google tokeninfo API fallback...")
+                try:
+                    # Fallback to Google tokeninfo public API endpoint
+                    resp = py_requests.get(f'https://oauth2.googleapis.com/tokeninfo?id_token={credential}', timeout=8)
+                    if resp.status_code == 200:
+                        id_info = resp.json()
+                        email = id_info.get('email')
+                        name = id_info.get('name')
+                        email_verified = id_info.get('email_verified') == 'true' or id_info.get('email_verified') is True
+                    else:
+                        logger.error(f"Google tokeninfo endpoint rejected token: {resp.text}")
+                except Exception as fallback_err:
+                    logger.error(f"Google tokeninfo fallback failed: {fallback_err}")
+
+        # 2. Fallback using access_token to userinfo endpoint
+        if not email and access_token:
+            try:
+                headers = {'Authorization': f'Bearer {access_token}'}
+                resp = py_requests.get('https://www.googleapis.com/oauth2/v3/userinfo', headers=headers, timeout=8)
+                if resp.status_code == 200:
+                    info = resp.json()
+                    email = info.get('email')
+                    name = info.get('name')
+                    email_verified = info.get('email_verified', True)
+            except Exception as e:
+                logger.error(f"Failed to fetch userinfo with access_token: {e}")
+
+        if not email:
+            return Response(
+                {"detail": "Unable to verify Google credentials. Please ensure Client ID and Google Sign-In configurations match."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not email_verified:
+            return Response(
+                {"detail": "Your Google account email is not verified."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 3. User Lookup & Account Provisioning
+        user = User.objects.filter(email__iexact=email).first()
+
+        if user:
+            if user.status == 'Disabled':
+                return Response({"detail": "This user account has been disabled."}, status=status.HTTP_403_FORBIDDEN)
+        else:
+            # Create user if user does not exist
+            with transaction.atomic():
+                user_role = Role.objects.filter(name="User").first()
+                user = User.objects.create_user(
+                    email=email.lower(),
+                    password=User.objects.make_random_password(),
+                    name=name or email.split('@')[0],
+                    role=user_role,
+                    status="Active"
+                )
+                log_activity(user, f"Registered account via Google Sign-In ({email})", "authentication", request)
+                create_notification(user, "Welcome to College MOU Dashboard", f"Hi {user.name}, your account was created via Google Sign-In.")
+                notify_admins("New Google User Registered", f"User {user.name} ({user.email}) registered via Google Sign-In.")
+
+        # 4. Generate JWT Tokens
+        refresh = RefreshToken.for_user(user)
+        user.last_login = timezone.now()
+        user.save(update_fields=['last_login'])
+        log_activity(user, "User logged in successfully via Google Sign-In", "authentication", request)
+
+        return Response({
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'user': CustomUserSerializer(user).data
+        }, status=status.HTTP_200_OK)
+
+
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all().order_by('-created_at')
     permission_classes = [HasDynamicPermission]

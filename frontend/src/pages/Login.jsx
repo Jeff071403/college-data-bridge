@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Box, Card, CardContent, Typography, TextField, Button, 
   Alert, InputAdornment, IconButton, CircularProgress,
-  Grid, FormControlLabel, Checkbox, Link, Tooltip, Avatar
+  Grid, FormControlLabel, Checkbox, Link, Tooltip, Avatar, Divider
 } from '@mui/material';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
@@ -13,12 +13,13 @@ import CloudQueueIcon from '@mui/icons-material/CloudQueue';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import ArrowRightAltIcon from '@mui/icons-material/ArrowRightAlt';
+import { GoogleLogin } from '@react-oauth/google';
 
 import { useAuth } from '../context/AuthContext';
 import { useThemeMode } from '../context/ThemeContext';
 
 const Login = () => {
-  const { login, user } = useAuth();
+  const { login, googleLogin, user } = useAuth();
   const { mode, toggleTheme } = useThemeMode();
   const navigate = useNavigate();
   const location = useLocation();
@@ -29,6 +30,7 @@ const Login = () => {
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   const queryParams = new URLSearchParams(location.search);
   const isRegistered = queryParams.get('registered') === 'true';
@@ -66,6 +68,27 @@ const Login = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleGoogleSuccess = async (credentialResponse) => {
+    setGoogleLoading(true);
+    setError('');
+    try {
+      const loggedUser = await googleLogin(credentialResponse.credential);
+      navigate('/', { state: { successMessage: `Logged in via Google! Welcome back, ${loggedUser.name || 'user'}.` } });
+    } catch (err) {
+      console.error("Google login failed:", err);
+      setError(
+        err.response?.data?.detail || 
+        'Google Sign-In failed. Please try again or use email/password login.'
+      );
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  const handleGoogleError = () => {
+    setError('Google Sign-In popup was closed or cancelled. Please try again.');
   };
 
   const isDark = mode === 'dark';
@@ -305,6 +328,25 @@ const Login = () => {
                 </Button>
               </Box>
             </form>
+
+            <Divider sx={{ my: 3, color: 'text.secondary', fontSize: '0.8rem', fontWeight: 600 }}>
+              OR CONTINUE WITH
+            </Divider>
+
+            <Box sx={{ display: 'flex', justifyContent: 'center', width: '100%', minHeight: 44 }}>
+              {googleLoading ? (
+                <CircularProgress size={28} />
+              ) : (
+                <GoogleLogin
+                  onSuccess={handleGoogleSuccess}
+                  onError={handleGoogleError}
+                  shape="pill"
+                  size="large"
+                  theme={isDark ? 'filled_black' : 'outline'}
+                  text="continue_with"
+                />
+              )}
+            </Box>
 
 
 

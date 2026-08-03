@@ -72,6 +72,11 @@ class DocumentManagementSystemTests(TestCase):
         response = self.client.post('/api/users/auth/login/', {'email': 'user@test.edu', 'password': 'password123'})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_google_login_missing_token(self):
+        response = self.client.post('/api/users/auth/google/', {})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("detail", response.data)
+
     def test_dashboard_permission_for_user(self):
         # Normal User has view_dashboard permission by role
         token = self.get_jwt_token("user@test.edu", "password123")
