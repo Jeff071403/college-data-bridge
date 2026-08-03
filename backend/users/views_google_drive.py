@@ -234,10 +234,20 @@ class GoogleDriveViewSet(viewsets.ViewSet):
 
             log_activity(request.user, f"Connected Google Drive account: {setting.connected_email}", "drive")
             
+            print("\n" + "=" * 70)
+            print(" [GOOGLE DRIVE SUCCESS] Google Drive Connected Successfully! ")
+            print(f"  Connected Email   : {setting.connected_email}")
+            print(f"  Connection Status : {setting.connection_status}")
+            print(f"  Storage Limit     : {setting.storage_limit} bytes")
+            print("=" * 70 + "\n")
+
             frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173').rstrip('/') + '/settings?drive=connected'
             return HttpResponseRedirect(frontend_url)
         except Exception as e:
             logger.error(f"Google Drive OAuth callback failed: {e}", exc_info=True)
+            print("\n" + "=" * 70)
+            print(f" [GOOGLE DRIVE ERROR] Google Drive OAuth Callback Failed: {e}")
+            print("=" * 70 + "\n")
             frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173').rstrip('/') + f'/settings?drive=failed&error={urllib.parse.quote(str(e))}'
             return HttpResponseRedirect(frontend_url)
 
@@ -290,11 +300,22 @@ class GoogleDriveViewSet(viewsets.ViewSet):
             setting.save()
 
             log_activity(request.user, "Tested Google Drive OAuth connection status: Success", "drive")
+            
+            print("\n" + "=" * 70)
+            print(" [GOOGLE DRIVE SUCCESS] Connection Test Succeeded!")
+            print(f"  Connected Email   : {setting.connected_email}")
+            print(f"  Connection Status : Connected")
+            print(f"  Storage Limit     : {setting.storage_limit} bytes")
+            print("=" * 70 + "\n")
+
             return Response({"detail": "Google Drive connection test succeeded! Tokens and storage access verified successfully."})
         except Exception as e:
             logger.error(f"Google Drive test connection failed: {e}", exc_info=True)
             setting.connection_status = 'Refresh Failed'
             setting.save()
+            print("\n" + "=" * 70)
+            print(f" [GOOGLE DRIVE ERROR] Connection Test Failed: {e}")
+            print("=" * 70 + "\n")
             return Response(
                 {"detail": f"Google Drive connection test failed: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
