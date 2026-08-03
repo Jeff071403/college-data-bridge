@@ -71,7 +71,6 @@ class FolderViewSet(viewsets.ModelViewSet):
     serializer_class = FolderSerializer
     permission_classes = [HasDynamicPermission]
 
-    # Map actions to dynamic permissions
     action_permissions = {
         'list': 'view_folder',
         'retrieve': 'view_folder',
@@ -84,6 +83,7 @@ class FolderViewSet(viewsets.ModelViewSet):
         'create_custom': 'create_folder',
         'rename_custom': 'rename_folder',
         'delete_custom': 'delete_folder',
+        'bulk_delete': 'delete_folder',
         'drive_status': 'view_folder',
         'audit': 'view_folder',
     }
@@ -401,6 +401,58 @@ class FolderViewSet(viewsets.ModelViewSet):
             return Response({"detail": f"Deletion sync with Google Drive failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=['post'], url_path='bulk-delete')
+    def bulk_delete(self, request):
+        """
+        Maps to POST /api/folders/bulk-delete/
+        """
+        folder_ids = request.data.get('folder_ids', [])
+        if not folder_ids:
+            return Response({"folder_ids": ["This field is required."]}, status=status.HTTP_400_BAD_REQUEST)
+        
+        folders = Folder.objects.filter(id__in=folder_ids)
+        if len(folders) != len(folder_ids):
+            return Response({"detail": "One or more of the selected folders do not exist."}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Access & Permission check for all folders
+        is_admin = request.user.role and request.user.role.name in ["Super Admin", "Admin"]
+        for folder in folders:
+            if not folder.has_access(request.user):
+                return Response({"detail": f"You do not have access to delete folder '{folder.name}'."}, status=status.HTTP_403_FORBIDDEN)
+            
+            # Share permission restriction
+            if not is_admin:
+                share_perm = get_mou_share_permission(request.user, folder)
+                if share_perm in ['View Only', 'Upload Only']:
+                    return Response(
+                        {"detail": f"You only have read/upload access and cannot delete folder '{folder.name}'."},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+        
+        deleted_names = []
+        try:
+            with transaction.atomic():
+                for folder in folders:
+                    folder_name = folder.name
+                    google_folder_id = folder.google_folder_id
+                    
+                    if google_folder_id:
+                        try:
+                            drive_service.delete_file(google_folder_id)
+                        except Exception as drive_err:
+                            logger.warning(f"Failed to delete folder '{google_folder_id}' on Google Drive: {drive_err}")
+                    
+                    folder.delete()
+                    deleted_names.append(folder_name)
+                
+                if deleted_names:
+                    log_activity(request.user, f"Bulk deleted folders: {', '.join(deleted_names)}", "folders", request)
+                    notify_admins("Folders Deleted", f"Folders: {', '.join(deleted_names)} were deleted by {request.user.name}.", metadata={'action': 'folders_bulk_deleted', 'folder_names': deleted_names})
+        except Exception as e:
+            return Response({"detail": f"Database bulk folder deletion failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+        return Response({"detail": "Selected folders deleted successfully."}, status=status.HTTP_200_OK)
 
     def sync_drive_directory(self, parent_google_id, parent_folder_obj, user):
         """
