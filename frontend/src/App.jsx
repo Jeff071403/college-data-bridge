@@ -124,7 +124,7 @@ function App() {
             <Route
               path="/settings"
               element={
-                <ProtectedRoute requiredPermission="view_dashboard" onlySuperAdmin={true}>
+                <ProtectedRoute requiredPermission="view_dashboard" blockUserRole={true}>
                   <Layout><Settings /></Layout>
                 </ProtectedRoute>
               }

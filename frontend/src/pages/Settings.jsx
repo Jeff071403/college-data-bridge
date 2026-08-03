@@ -878,6 +878,14 @@ const Settings = () => {
   const [activeTab, setActiveTab] = useState(0);
   const [savedSuccess, setSavedSuccess] = useState('');
 
+  // Auto-switch to Google Drive tab (Tab index 5) when returning from Google OAuth redirect
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('drive') || params.has('code') || params.get('tab') === 'drive') {
+      setActiveTab(5);
+    }
+  }, []);
+
   // ── Appearance State ──
   const [selectedPreset, setSelectedPreset] = useState(() => {
     const saved = localStorage.getItem('app_primary_color');
