@@ -153,35 +153,36 @@ const SuperAdminDashboard = ({ stats, user, navigate, setPreviewFile }) => {
           </Box>
           <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
             <Button
-              variant="contained"
               onClick={() => navigate('/users')}
               sx={{
-                bgcolor: '#ffffff !important',
+                background: '#ffffff !important',
                 color: '#4F46E5 !important',
                 fontWeight: 800,
                 px: 2.5,
                 py: 1,
                 borderRadius: '12px',
                 boxShadow: '0 4px 14px rgba(0,0,0,0.18) !important',
-                '&:hover': { bgcolor: '#f8fafc !important', color: '#4F46E5 !important', transform: 'translateY(-1px)' }
+                '& .MuiSvgIcon-root': { color: '#4F46E5 !important' },
+                '&:hover': { background: '#f8fafc !important', color: '#4F46E5 !important', transform: 'translateY(-1px)' }
               }}
-              startIcon={<ManageAccountsIcon sx={{ color: '#4F46E5 !important' }} />}
+              startIcon={<ManageAccountsIcon />}
             >
               Manage Users
             </Button>
             <Button
-              variant="outlined"
               onClick={() => navigate('/settings')}
               sx={{
-                borderColor: 'rgba(255,255,255,0.7) !important',
+                background: 'rgba(255,255,255,0.15) !important',
+                border: '1px solid rgba(255,255,255,0.6) !important',
                 color: '#ffffff !important',
                 fontWeight: 700,
                 px: 2.5,
                 py: 1,
                 borderRadius: '12px',
-                '&:hover': { borderColor: '#ffffff !important', bgcolor: 'rgba(255,255,255,0.15) !important' }
+                '& .MuiSvgIcon-root': { color: '#ffffff !important' },
+                '&:hover': { background: 'rgba(255,255,255,0.25) !important', borderColor: '#ffffff !important', transform: 'translateY(-1px)' }
               }}
-              startIcon={<SettingsIcon sx={{ color: '#ffffff !important' }} />}
+              startIcon={<SettingsIcon />}
             >
               System Settings
             </Button>
@@ -410,19 +411,39 @@ const AdminDashboard = ({ stats, user, navigate, setPreviewFile }) => {
               MOU Operations &amp; Verification Hub — review pending agreements, monitor compliance renewals, and manage departmental repositories.
             </Typography>
           </Box>
-          <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+          <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', width: { xs: '100%', sm: 'auto' } }}>
             <Button
-              variant="contained"
               onClick={() => navigate('/explorer')}
-              sx={{ bgcolor: '#ffffff', color: '#2563EB', fontWeight: 800, px: 2.5, py: 1, borderRadius: '12px', '&:hover': { bgcolor: '#f8fafc', transform: 'translateY(-1px)' } }}
+              sx={{
+                background: '#ffffff !important',
+                color: '#2563EB !important',
+                fontWeight: 800,
+                px: 2.5,
+                py: 1,
+                borderRadius: '12px',
+                boxShadow: '0 4px 14px rgba(0,0,0,0.18) !important',
+                width: { xs: '100%', sm: 'auto' },
+                '& .MuiSvgIcon-root': { color: '#2563EB !important' },
+                '&:hover': { background: '#f8fafc !important', color: '#2563EB !important', transform: 'translateY(-1px)' }
+              }}
               startIcon={<CloudUploadIcon />}
             >
               Upload Document
             </Button>
             <Button
-              variant="outlined"
               onClick={() => navigate('/system-map')}
-              sx={{ borderColor: 'rgba(255,255,255,0.5)', color: '#fff', fontWeight: 700, px: 2.5, py: 1, borderRadius: '12px', '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,0.12)' } }}
+              sx={{
+                background: 'rgba(255,255,255,0.15) !important',
+                border: '1px solid rgba(255,255,255,0.6) !important',
+                color: '#ffffff !important',
+                fontWeight: 700,
+                px: 2.5,
+                py: 1,
+                borderRadius: '12px',
+                width: { xs: '100%', sm: 'auto' },
+                '& .MuiSvgIcon-root': { color: '#ffffff !important' },
+                '&:hover': { background: 'rgba(255,255,255,0.25) !important', borderColor: '#ffffff !important', transform: 'translateY(-1px)' }
+              }}
               startIcon={<InfoOutlinedIcon />}
             >
               Lifecycle Guide
@@ -603,19 +624,39 @@ const UserDashboard = ({ stats, user, navigate, setPreviewFile }) => {
               Your Personal MOU &amp; Document Hub — access assigned departmental folders, review your uploaded files, and submit new agreements.
             </Typography>
           </Box>
-          <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+          <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', width: { xs: '100%', sm: 'auto' } }}>
             <Button
-              variant="contained"
               onClick={() => navigate('/explorer')}
-              sx={{ bgcolor: '#ffffff', color: '#0D9488', fontWeight: 800, px: 2.5, py: 1, borderRadius: '12px', '&:hover': { bgcolor: '#f8fafc', transform: 'translateY(-1px)' } }}
+              sx={{
+                background: '#ffffff !important',
+                color: '#0D9488 !important',
+                fontWeight: 800,
+                px: 2.5,
+                py: 1,
+                borderRadius: '12px',
+                boxShadow: '0 4px 14px rgba(0,0,0,0.18) !important',
+                width: { xs: '100%', sm: 'auto' },
+                '& .MuiSvgIcon-root': { color: '#0D9488 !important' },
+                '&:hover': { background: '#f8fafc !important', color: '#0D9488 !important', transform: 'translateY(-1px)' }
+              }}
               startIcon={<CloudUploadIcon />}
             >
               Upload Document
             </Button>
             <Button
-              variant="outlined"
               onClick={() => navigate('/system-map')}
-              sx={{ borderColor: 'rgba(255,255,255,0.5)', color: '#fff', fontWeight: 700, px: 2.5, py: 1, borderRadius: '12px', '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,0.12)' } }}
+              sx={{
+                background: 'rgba(255,255,255,0.15) !important',
+                border: '1px solid rgba(255,255,255,0.6) !important',
+                color: '#ffffff !important',
+                fontWeight: 700,
+                px: 2.5,
+                py: 1,
+                borderRadius: '12px',
+                width: { xs: '100%', sm: 'auto' },
+                '& .MuiSvgIcon-root': { color: '#ffffff !important' },
+                '&:hover': { background: 'rgba(255,255,255,0.25) !important', borderColor: '#ffffff !important', transform: 'translateY(-1px)' }
+              }}
               startIcon={<MapIcon />}
             >
               System Guide
