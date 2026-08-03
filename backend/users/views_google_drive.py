@@ -148,20 +148,27 @@ class GoogleDriveViewSet(viewsets.ViewSet):
         url = 'https://accounts.google.com/o/oauth2/auth?' + urllib.parse.urlencode(params)
         return Response({'url': url})
 
-    @action(detail=False, methods=['get'], url_path='oauth/callback', permission_classes=[permissions.AllowAny])
+    @action(detail=False, methods=['get', 'post'], url_path='oauth/callback', permission_classes=[permissions.AllowAny])
     def oauth_callback(self, request):
         from django.http import HttpResponseRedirect
         
-        code = request.query_params.get('code')
+        code = request.data.get('code') or request.query_params.get('code')
+        req_redirect_uri = request.data.get('redirect_uri') or request.query_params.get('redirect_uri')
+        is_json_req = request.content_type == 'application/json' or request.data.get('code') is not None
+
         if not code:
-            error_reason = request.query_params.get('error', 'No authorization code received')
+            error_reason = request.data.get('error') or request.query_params.get('error', 'No authorization code received')
+            if is_json_req:
+                return Response({"detail": error_reason}, status=status.HTTP_400_BAD_REQUEST)
             frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173').rstrip('/') + f'/settings?drive=failed&error={urllib.parse.quote(error_reason)}'
             return HttpResponseRedirect(frontend_url)
 
         client_id, client_secret = get_oauth_credentials()
-        redirect_uri = get_oauth_redirect_uri(getattr(settings, 'GOOGLE_OAUTH_REDIRECT_URI', 'http://localhost:8000/api/google-drive/oauth/callback/'))
+        redirect_uri = get_oauth_redirect_uri(req_redirect_uri or getattr(settings, 'GOOGLE_OAUTH_REDIRECT_URI', 'http://localhost:8000/api/google-drive/oauth/callback/'))
 
         if not client_id or not client_secret or not redirect_uri:
+            if is_json_req:
+                return Response({"detail": "Google OAuth credentials or redirect_uri missing on server"}, status=status.HTTP_400_BAD_REQUEST)
             frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173').rstrip('/') + '/settings?drive=failed&error=credentials_missing'
             return HttpResponseRedirect(frontend_url)
 
@@ -177,6 +184,8 @@ class GoogleDriveViewSet(viewsets.ViewSet):
         try:
             res = requests.post(token_url, data=payload)
             if res.status_code != 200:
+                if is_json_req:
+                    return Response({"detail": f"Failed to exchange code with Google: {res.text}"}, status=status.HTTP_400_BAD_REQUEST)
                 frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173').rstrip('/') + f'/settings?drive=failed&error={urllib.parse.quote(res.text)}'
                 return HttpResponseRedirect(frontend_url)
 
@@ -232,7 +241,8 @@ class GoogleDriveViewSet(viewsets.ViewSet):
                 setting.project_id = 'Web OAuth Project'
             setting.save()
 
-            log_activity(request.user, f"Connected Google Drive account: {setting.connected_email}", "drive")
+            if request.user and request.user.is_authenticated:
+                log_activity(request.user, f"Connected Google Drive account: {setting.connected_email}", "drive")
             
             print("\n" + "=" * 70)
             print(" [GOOGLE DRIVE SUCCESS] Google Drive Connected Successfully! ")
@@ -241,6 +251,13 @@ class GoogleDriveViewSet(viewsets.ViewSet):
             print(f"  Storage Limit     : {setting.storage_limit} bytes")
             print("=" * 70 + "\n")
 
+            if is_json_req:
+                return Response({
+                    "detail": "Google Drive connected successfully!",
+                    "connected_email": setting.connected_email,
+                    "connection_status": "Connected"
+                }, status=status.HTTP_200_OK)
+
             frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173').rstrip('/') + '/settings?drive=connected'
             return HttpResponseRedirect(frontend_url)
         except Exception as e:
@@ -248,6 +265,8 @@ class GoogleDriveViewSet(viewsets.ViewSet):
             print("\n" + "=" * 70)
             print(f" [GOOGLE DRIVE ERROR] Google Drive OAuth Callback Failed: {e}")
             print("=" * 70 + "\n")
+            if is_json_req:
+                return Response({"detail": f"OAuth authorization failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173').rstrip('/') + f'/settings?drive=failed&error={urllib.parse.quote(str(e))}'
             return HttpResponseRedirect(frontend_url)
 

@@ -47,7 +47,7 @@ const GoogleDriveSettingsTab = () => {
       setSuccess(null);
       try {
         const redirectUri = `${window.location.origin}/settings`;
-        const response = await api.post('/api/google-drive/oauth-callback/', {
+        const response = await api.post('/api/google-drive/oauth/callback/', {
           code: authCode,
           redirect_uri: redirectUri
         });
