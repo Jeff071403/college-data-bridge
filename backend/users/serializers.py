@@ -170,7 +170,7 @@ class SMTPSettingSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at'
         ]
         extra_kwargs = {
-            'password': {'required': False}
+            'password': {'required': False, 'write_only': True}
         }
 
     def update(self, instance, validated_data):

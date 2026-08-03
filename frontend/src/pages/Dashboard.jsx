@@ -3,7 +3,7 @@ import {
   Box, Grid, Card, Typography, Avatar, 
   CircularProgress, Button, Divider, Table, TableBody, 
   TableCell, TableContainer, TableHead, TableRow, Paper,
-  Chip, IconButton, Tooltip, LinearProgress, Alert, Tab, Tabs
+  Chip, IconButton, Tooltip, LinearProgress, Alert
 } from '@mui/material';
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip,
@@ -145,7 +145,7 @@ const SuperAdminDashboard = ({ stats, user, navigate, setPreviewFile }) => {
               <Chip label={storage.drive_connected ? "Google Drive Synced" : "Local Storage"} size="small" sx={{ bgcolor: storage.drive_connected ? 'rgba(16,185,129,0.25)' : 'rgba(255,255,255,0.15)', color: '#fff', fontWeight: 700, fontSize: '0.72rem' }} />
             </Box>
             <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: '-0.02em', mb: 0.5 }}>
-              System Governance &amp; Infrastructure Hub
+              MCC Legal Documents
             </Typography>
             <Typography variant="body2" sx={{ opacity: 0.9, fontSize: '0.9rem', maxWidth: 640 }}>
               Full system control panel — monitor infrastructure health, user access permissions, global storage quotas, and audit logs.
@@ -154,19 +154,11 @@ const SuperAdminDashboard = ({ stats, user, navigate, setPreviewFile }) => {
           <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
             <Button
               variant="contained"
-              onClick={() => navigate('/users')}
+              onClick={() => navigate('/system-map')}
               sx={{ bgcolor: '#ffffff', color: '#4F46E5', fontWeight: 800, px: 2.5, py: 1, borderRadius: '12px', '&:hover': { bgcolor: '#f8fafc', transform: 'translateY(-1px)' } }}
-              startIcon={<ManageAccountsIcon />}
+              startIcon={<MapIcon />}
             >
-              Manage Users
-            </Button>
-            <Button
-              variant="outlined"
-              onClick={() => navigate('/settings')}
-              sx={{ borderColor: 'rgba(255,255,255,0.5)', color: '#fff', fontWeight: 700, px: 2.5, py: 1, borderRadius: '12px', '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,0.12)' } }}
-              startIcon={<SettingsIcon />}
-            >
-              System Settings
+              System Guide
             </Button>
           </Box>
         </Box>
@@ -395,20 +387,12 @@ const AdminDashboard = ({ stats, user, navigate, setPreviewFile }) => {
           </Box>
           <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
             <Button
-              variant="contained"
-              onClick={() => navigate('/explorer')}
-              sx={{ bgcolor: '#ffffff', color: '#2563EB', fontWeight: 800, px: 2.5, py: 1, borderRadius: '12px', '&:hover': { bgcolor: '#f8fafc', transform: 'translateY(-1px)' } }}
-              startIcon={<CloudUploadIcon />}
-            >
-              Upload Document
-            </Button>
-            <Button
               variant="outlined"
               onClick={() => navigate('/system-map')}
               sx={{ borderColor: 'rgba(255,255,255,0.5)', color: '#fff', fontWeight: 700, px: 2.5, py: 1, borderRadius: '12px', '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,0.12)' } }}
-              startIcon={<InfoOutlinedIcon />}
+              startIcon={<MapIcon />}
             >
-              Lifecycle Guide
+              System Guide
             </Button>
           </Box>
         </Box>
@@ -589,16 +573,8 @@ const UserDashboard = ({ stats, user, navigate, setPreviewFile }) => {
           <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
             <Button
               variant="contained"
-              onClick={() => navigate('/explorer')}
-              sx={{ bgcolor: '#ffffff', color: '#0D9488', fontWeight: 800, px: 2.5, py: 1, borderRadius: '12px', '&:hover': { bgcolor: '#f8fafc', transform: 'translateY(-1px)' } }}
-              startIcon={<CloudUploadIcon />}
-            >
-              Upload Document
-            </Button>
-            <Button
-              variant="outlined"
               onClick={() => navigate('/system-map')}
-              sx={{ borderColor: 'rgba(255,255,255,0.5)', color: '#fff', fontWeight: 700, px: 2.5, py: 1, borderRadius: '12px', '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,0.12)' } }}
+              sx={{ bgcolor: '#ffffff', color: '#0D9488', fontWeight: 800, px: 2.5, py: 1, borderRadius: '12px', '&:hover': { bgcolor: '#f8fafc', transform: 'translateY(-1px)' } }}
               startIcon={<MapIcon />}
             >
               System Guide
@@ -668,7 +644,7 @@ const UserDashboard = ({ stats, user, navigate, setPreviewFile }) => {
                     <TableRow>
                       <TableCell colSpan={4} sx={{ textAlign: 'center', py: 4 }}>
                         <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                          You haven't uploaded any documents yet. Click "Upload Document" to add your first file.
+                          No documents uploaded yet.
                         </Typography>
                       </TableCell>
                     </TableRow>
@@ -756,41 +732,9 @@ const UserDashboard = ({ stats, user, navigate, setPreviewFile }) => {
           </Box>
         </Grid>
 
-        {/* Bottom CTA Cards (Side-by-Side) */}
-        <Grid item xs={12} md={6}>
-          <Card sx={{ p: 3, borderRadius: '18px', border: '1px solid', borderColor: 'divider', boxShadow: 'none', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', textAlign: 'center' }}>
-            <Box>
-              <Avatar sx={{ width: 48, height: 48, bgcolor: 'rgba(20,184,166,0.15)', color: '#0D9488', mx: 'auto', mb: 1.5, borderRadius: '14px' }}>
-                <CloudUploadIcon fontSize="medium" />
-              </Avatar>
-              <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 0.5 }}>
-                Upload New Agreement Document
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontSize: '0.82rem' }}>
-                Upload PDF, Word, or scanned agreement documents to your department repository.
-              </Typography>
-            </Box>
-            <Button
-              fullWidth
-              variant="contained"
-              onClick={() => navigate('/explorer')}
-              sx={{
-                py: 1.2,
-                borderRadius: '12px',
-                background: 'linear-gradient(135deg, #0D9488 0%, #14B8A6 100%)',
-                fontWeight: 800,
-                boxShadow: '0 6px 20px rgba(20, 184, 166, 0.3)',
-                '&:hover': { transform: 'translateY(-2px)' }
-              }}
-              startIcon={<CloudUploadIcon />}
-            >
-              Open File Explorer
-            </Button>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} md={6}>
-          <Card sx={{ p: 3, borderRadius: '18px', border: '1px solid', borderColor: 'divider', boxShadow: 'none', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', textAlign: 'center' }}>
+        {/* Bottom CTA Cards */}
+        <Grid item xs={12}>
+          <Card sx={{ p: 3, borderRadius: '18px', border: '1px solid', borderColor: 'divider', boxShadow: 'none', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', textAlign: 'center' }}>
             <Box>
               <Avatar sx={{ width: 48, height: 48, bgcolor: 'rgba(59,130,246,0.15)', color: '#2563EB', mx: 'auto', mb: 1.5, borderRadius: '14px' }}>
                 <MapIcon fontSize="medium" />
@@ -803,7 +747,6 @@ const UserDashboard = ({ stats, user, navigate, setPreviewFile }) => {
               </Typography>
             </Box>
             <Button
-              fullWidth
               variant="outlined"
               onClick={() => navigate('/system-map')}
               sx={{
@@ -811,6 +754,9 @@ const UserDashboard = ({ stats, user, navigate, setPreviewFile }) => {
                 borderRadius: '12px',
                 fontWeight: 800,
                 borderColor: 'primary.main',
+                maxWidth: 280,
+                width: '100%',
+                mx: 'auto',
                 '&:hover': { transform: 'translateY(-2px)' }
               }}
               startIcon={<InfoOutlinedIcon />}
@@ -838,14 +784,6 @@ const Dashboard = () => {
 
   // Detect user role
   const userRole = user?.role?.name || 'User';
-  const isSuperAdmin = userRole === 'Super Admin';
-
-  // Role Tab Switcher (Super Admins can preview all 3 dashboards)
-  const [activeRoleTab, setActiveRoleTab] = useState(userRole);
-
-  useEffect(() => {
-    setActiveRoleTab(userRole);
-  }, [userRole]);
 
   useEffect(() => {
     if (successMsg) {
@@ -884,35 +822,14 @@ const Dashboard = () => {
         </Alert>
       )}
 
-      {/* Super Admin Role Switcher Tabs */}
-      {isSuperAdmin && (
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5, pb: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
-          <Typography variant="caption" sx={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'text.secondary' }}>
-            Dashboard View Switcher:
-          </Typography>
-          <Tabs
-            value={activeRoleTab}
-            onChange={(e, val) => setActiveRoleTab(val)}
-            sx={{
-              minHeight: 36,
-              '& .MuiTab-root': { py: 0.5, px: 2, minHeight: 36, fontWeight: 800, fontSize: '0.78rem', borderRadius: '10px' }
-            }}
-          >
-            <Tab value="Super Admin" label="Super Admin Dashboard" />
-            <Tab value="Admin" label="Admin Dashboard" />
-            <Tab value="User" label="User Dashboard" />
-          </Tabs>
-        </Box>
-      )}
-
       {/* Render Role Specific Dashboard */}
-      {activeRoleTab === 'Super Admin' && (
+      {userRole === 'Super Admin' && (
         <SuperAdminDashboard stats={stats} user={user} navigate={navigate} setPreviewFile={setPreviewFile} />
       )}
-      {activeRoleTab === 'Admin' && (
+      {userRole === 'Admin' && (
         <AdminDashboard stats={stats} user={user} navigate={navigate} setPreviewFile={setPreviewFile} />
       )}
-      {activeRoleTab === 'User' && (
+      {userRole !== 'Super Admin' && userRole !== 'Admin' && (
         <UserDashboard stats={stats} user={user} navigate={navigate} setPreviewFile={setPreviewFile} />
       )}
 

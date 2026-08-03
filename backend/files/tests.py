@@ -300,3 +300,55 @@ class FileSyncAPITests(APITestCase):
                 os.remove(file_instance.file_field.path)
             except Exception:
                 pass
+
+    @patch('services.drive_service.upload_file')
+    def test_file_security_hashing_and_scanning(self, mock_upload):
+        import hashlib
+        mock_upload.return_value = {
+            'id': 'drive_mock_file_id_999',
+            'mimeType': 'application/pdf',
+            'size': 18,
+            'webViewLink': 'https://drive.google.com/view',
+            'webContentLink': 'https://drive.google.com/download'
+        }
+
+        # Create a file upload request
+        file_content = b"test secure file content"
+        uploaded_file = SimpleUploadedFile("secure_test.pdf", file_content, content_type="application/pdf")
+        
+        # Calculate expected hash
+        expected_hash = hashlib.sha256(file_content).hexdigest()
+
+        # Perform the request
+        response = self.client.post('/api/files/', {
+            'folder_id': self.folder.id,
+            'file': uploaded_file
+        }, format='multipart')
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['sha256_hash'], expected_hash)
+        self.assertEqual(response.data['virus_scan_status'], 'Clean')
+        self.assertEqual(response.data['encrypted'], True)
+        self.assertEqual(response.data['encryption_key_id'], 'Google-Drive-AES-256')
+
+        # Test duplicate detection
+        uploaded_file_duplicate = SimpleUploadedFile("secure_test_dup.pdf", file_content, content_type="application/pdf")
+        response_dup = self.client.post('/api/files/', {
+            'folder_id': self.folder.id,
+            'file': uploaded_file_duplicate
+        }, format='multipart')
+        
+        # Verify duplicate upload is rejected
+        self.assertEqual(response_dup.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Duplicate upload detected", response_dup.data['detail'])
+
+        # Test threat detection for malicious extensions
+        malicious_file = SimpleUploadedFile("malicious.exe", b"malicious code", content_type="application/octet-stream")
+        response_mal = self.client.post('/api/files/', {
+            'folder_id': self.folder.id,
+            'file': malicious_file
+        }, format='multipart')
+        
+        # Since duplicate checks happen, let's make sure it checks virus status on success
+        self.assertEqual(response_mal.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response_mal.data['virus_scan_status'], 'Threat Detected')

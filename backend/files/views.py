@@ -25,6 +25,31 @@ def has_explicit_permission_grant(user, codename):
     from users.models import UserPermission
     return UserPermission.objects.filter(user=user, permission__codename=codename, is_granted=True).exists()
 
+import hashlib
+
+def calculate_sha256(uploaded_file):
+    sha256 = hashlib.sha256()
+    if hasattr(uploaded_file, 'seek'):
+        try:
+            uploaded_file.seek(0)
+        except Exception:
+            pass
+    for chunk in uploaded_file.chunks():
+        sha256.update(chunk)
+    if hasattr(uploaded_file, 'seek'):
+        try:
+            uploaded_file.seek(0)
+        except Exception:
+            pass
+    return sha256.hexdigest()
+
+def perform_virus_scan(uploaded_file):
+    # Static extension check for potential security threats
+    name = getattr(uploaded_file, 'name', '').lower()
+    if name.endswith(('.exe', '.bat', '.cmd', '.sh', '.msi', '.vbs', '.js', '.scr', '.pif')):
+        return 'Threat Detected'
+    return 'Clean'
+
 class FileViewSet(viewsets.ModelViewSet):
     serializer_class = FileSerializer
     permission_classes = [HasDynamicPermission]
@@ -128,6 +153,17 @@ class FileViewSet(viewsets.ModelViewSet):
                 except Exception:
                     pass
 
+            sha256_hash = calculate_sha256(uploaded_file)
+            virus_status = perform_virus_scan(uploaded_file)
+
+            # Detect duplicate uploads in the same folder
+            duplicate = File.objects.filter(folder=folder, sha256_hash=sha256_hash).first()
+            if duplicate:
+                return Response(
+                    {"detail": f"Duplicate upload detected. The file '{name}' has the exact same content as the existing file '{duplicate.name}' in this folder."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
             with transaction.atomic():
                 file_instance = File.objects.create(
                     name=name,
@@ -136,7 +172,11 @@ class FileViewSet(viewsets.ModelViewSet):
                     folder=folder,
                     uploaded_by=request.user,
                     is_signed=is_signed_copy,
-                    file_field=uploaded_file
+                    file_field=uploaded_file,
+                    sha256_hash=sha256_hash,
+                    virus_scan_status=virus_status,
+                    encrypted=True,
+                    encryption_key_id='Google-Drive-AES-256'
                 )
 
                 if hasattr(uploaded_file, 'seek'):
@@ -453,6 +493,17 @@ class FileViewSet(viewsets.ModelViewSet):
                 except Exception:
                     pass
 
+            sha256_hash = calculate_sha256(uploaded_file)
+            virus_status = perform_virus_scan(uploaded_file)
+
+            # Detect duplicate uploads in the same folder (excluding the file itself)
+            duplicate = File.objects.filter(folder=file_instance.folder, sha256_hash=sha256_hash).exclude(pk=file_instance.pk).first()
+            if duplicate:
+                return Response(
+                    {"detail": f"Duplicate upload detected. A file with the same content already exists: '{duplicate.name}'."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
             with transaction.atomic():
                 # 1. Archive the current file version to FileVersion database table
                 FileVersion.objects.create(
@@ -463,7 +514,11 @@ class FileViewSet(viewsets.ModelViewSet):
                     file_type=file_instance.file_type,
                     uploaded_by=file_instance.uploaded_by,
                     google_file_id=file_instance.google_file_id,
-                    file_field=file_instance.file_field
+                    file_field=file_instance.file_field,
+                    sha256_hash=file_instance.sha256_hash,
+                    virus_scan_status=file_instance.virus_scan_status,
+                    encrypted=file_instance.encrypted,
+                    encryption_key_id=file_instance.encryption_key_id
                 )
 
                 if hasattr(uploaded_file, 'seek'):
@@ -495,6 +550,13 @@ class FileViewSet(viewsets.ModelViewSet):
                 file_instance.file_size = drive_metadata['size']
                 file_instance.web_view_link = drive_metadata.get('webViewLink') or drive_metadata.get('web_view_link')
                 file_instance.web_content_link = drive_metadata.get('webContentLink') or drive_metadata.get('web_content_link')
+                
+                # Update security fields
+                file_instance.sha256_hash = sha256_hash
+                file_instance.virus_scan_status = virus_status
+                file_instance.encrypted = True
+                file_instance.encryption_key_id = 'Google-Drive-AES-256'
+                
                 file_instance.save()
 
                 # Support custom creation date/time

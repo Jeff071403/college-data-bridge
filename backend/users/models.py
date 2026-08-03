@@ -1,7 +1,78 @@
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+from django.conf import settings
+from django.utils import timezone
 from roles.models import Role
 import uuid
+import base64
+import hashlib
+from cryptography.fernet import Fernet
+
+def get_encryption_key():
+    key = getattr(settings, 'FIELD_ENCRYPTION_KEY', None)
+    if not key:
+        secret = settings.SECRET_KEY.encode('utf-8')
+        key_bytes = hashlib.sha256(secret).digest()
+        key = base64.urlsafe_b64encode(key_bytes)
+    return key
+
+def encrypt_value(value):
+    if not value:
+        return value
+    try:
+        if value.startswith('gAAAAA'):
+            return value
+        key = get_encryption_key()
+        f = Fernet(key)
+        return f.encrypt(value.encode('utf-8')).decode('utf-8')
+    except Exception:
+        return value
+
+def decrypt_value(value):
+    if not value:
+        return value
+    if not value.startswith('gAAAAA'):
+        return value
+    key = get_encryption_key()
+    f = Fernet(key)
+    try:
+        return f.decrypt(value.encode('utf-8')).decode('utf-8')
+    except Exception:
+        return value
+
+class EncryptedCharField(models.CharField):
+    def get_prep_value(self, value):
+        value = super().get_prep_value(value)
+        return encrypt_value(value)
+
+    def from_db_value(self, value, expression, connection):
+        if value is None:
+            return value
+        return decrypt_value(value)
+
+    def to_python(self, value):
+        if value is None:
+            return value
+        if isinstance(value, str) and value.startswith('gAAAAA'):
+            return decrypt_value(value)
+        return value
+
+class EncryptedTextField(models.TextField):
+    def get_prep_value(self, value):
+        value = super().get_prep_value(value)
+        return encrypt_value(value)
+
+    def from_db_value(self, value, expression, connection):
+        if value is None:
+            return value
+        return decrypt_value(value)
+
+    def to_python(self, value):
+        if value is None:
+            return value
+        if isinstance(value, str) and value.startswith('gAAAAA'):
+            return decrypt_value(value)
+        return value
 
 class CustomUserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):
@@ -49,6 +120,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    password_changed_at = models.DateTimeField(default=timezone.now)
 
     is_staff = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True) # Used by Django auth middleware
@@ -104,7 +176,7 @@ class SMTPSetting(models.Model):
     host = models.CharField(max_length=255)
     port = models.IntegerField(default=587)
     username = models.CharField(max_length=255, blank=True, null=True)
-    password = models.CharField(max_length=255, blank=True, null=True)
+    password = EncryptedCharField(max_length=500, blank=True, null=True)
     auth_required = models.BooleanField(default=True)
     use_tls = models.BooleanField(default=True)
     use_ssl = models.BooleanField(default=False)
@@ -130,20 +202,20 @@ class SMTPSetting(models.Model):
 class GoogleDriveSetting(models.Model):
     project_id = models.CharField(max_length=255, blank=True, null=True)
     private_key_id = models.CharField(max_length=255, blank=True, null=True)
-    private_key = models.TextField(blank=True, null=True)
+    private_key = EncryptedTextField(blank=True, null=True)
     client_email = models.EmailField(blank=True, null=True)
     client_id = models.CharField(max_length=255, blank=True, null=True)
-    client_secret = models.CharField(max_length=255, blank=True, null=True)
+    client_secret = EncryptedCharField(max_length=500, blank=True, null=True)
     root_folder_id = models.CharField(max_length=255, blank=True, null=True)
     
     # OAuth tokens & credentials
-    access_token = models.TextField(blank=True, null=True)
-    refresh_token = models.TextField(blank=True, null=True)
+    access_token = EncryptedTextField(blank=True, null=True)
+    refresh_token = EncryptedTextField(blank=True, null=True)
     connected_email = models.EmailField(blank=True, null=True)
     token_expiry = models.DateTimeField(blank=True, null=True)
     storage_limit = models.BigIntegerField(blank=True, null=True)
     storage_usage = models.BigIntegerField(blank=True, null=True)
-    token_data = models.TextField(blank=True, null=True)
+    token_data = EncryptedTextField(blank=True, null=True)
     default_upload_folder = models.CharField(max_length=255, blank=True, null=True, default='Root Repository')
     connection_status = models.CharField(max_length=50, default='Disconnected')
     oauth_connected = models.BooleanField(default=False)
