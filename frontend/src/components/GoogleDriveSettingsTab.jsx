@@ -210,6 +210,12 @@ const GoogleDriveSettingsTab = () => {
       {error && <Alert severity="error" sx={{ mb: 3.5, borderRadius: '12px' }}>{error}</Alert>}
       {success && <Alert severity="success" sx={{ mb: 3.5, borderRadius: '12px' }}>{success}</Alert>}
 
+      {(!isConnected || !statusData?.connected_email) && !loading && !connecting && (
+        <Alert severity="warning" icon={<WarningIcon />} sx={{ mb: 3.5, borderRadius: '12px', fontWeight: 700 }}>
+          No Google Drive Account Added: Click "Connect Google Drive" or "Change Google Account" below to authorize your Google Workspace storage.
+        </Alert>
+      )}
+
       {loading || connecting ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 8, gap: 2 }}>
           <CircularProgress />

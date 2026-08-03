@@ -78,10 +78,8 @@ const Login = () => {
       navigate('/', { state: { successMessage: `Logged in via Google! Welcome back, ${loggedUser.name || 'user'}.` } });
     } catch (err) {
       console.error("Google login failed:", err);
-      setError(
-        err.response?.data?.detail || 
-        'Google Sign-In failed. Please try again or use email/password login.'
-      );
+      const detailMsg = err.response?.data?.detail || err.message || 'Google account not added or invalid credentials.';
+      setError(`Google Account Error: ${detailMsg}`);
     } finally {
       setGoogleLoading(false);
     }
