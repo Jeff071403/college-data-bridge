@@ -45,7 +45,7 @@ def get_oauth_credentials():
             try:
                 with open(cred_path, 'r') as f:
                     data = json.load(f)
-                    web_data = data.get('web', {})
+                    web_data = data.get('web') or data.get('installed') or {}
                     if not client_id:
                         client_id = web_data.get('client_id', '')
                     if not client_secret:
@@ -127,7 +127,7 @@ class GoogleDriveViewSet(viewsets.ViewSet):
         if not client_id:
             return Response({"detail": "Google Client ID is not configured on the server"}, status=status.HTTP_400_BAD_REQUEST)
 
-        redirect_uri = getattr(settings, 'GOOGLE_OAUTH_REDIRECT_URI', '')
+        redirect_uri = get_oauth_redirect_uri(getattr(settings, 'GOOGLE_OAUTH_REDIRECT_URI', 'http://localhost:8000/api/google-drive/oauth/callback/'))
         if not redirect_uri:
             return Response({"detail": "GOOGLE_OAUTH_REDIRECT_URI settings is required"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -143,7 +143,7 @@ class GoogleDriveViewSet(viewsets.ViewSet):
         if force_select:
             params['prompt'] = 'consent select_account'
         else:
-            params['prompt'] = 'consent'
+            params['prompt'] = 'consent select_account'
 
         url = 'https://accounts.google.com/o/oauth2/auth?' + urllib.parse.urlencode(params)
         return Response({'url': url})
@@ -159,7 +159,7 @@ class GoogleDriveViewSet(viewsets.ViewSet):
             return HttpResponseRedirect(frontend_url)
 
         client_id, client_secret = get_oauth_credentials()
-        redirect_uri = getattr(settings, 'GOOGLE_OAUTH_REDIRECT_URI', '')
+        redirect_uri = get_oauth_redirect_uri(getattr(settings, 'GOOGLE_OAUTH_REDIRECT_URI', 'http://localhost:8000/api/google-drive/oauth/callback/'))
 
         if not client_id or not client_secret or not redirect_uri:
             frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173').rstrip('/') + '/settings?drive=failed&error=credentials_missing'
@@ -209,11 +209,17 @@ class GoogleDriveViewSet(viewsets.ViewSet):
             if not setting:
                 setting = GoogleDriveSetting()
 
+            # If switching to a new account, handle refresh_token
+            if setting.connected_email and connected_email and setting.connected_email != connected_email:
+                logger.info(f"Switching Google Drive account from '{setting.connected_email}' to '{connected_email}'")
+                if refresh_token:
+                    setting.refresh_token = refresh_token
+            elif refresh_token:
+                setting.refresh_token = refresh_token
+
             setting.client_id = client_id
             setting.client_secret = client_secret
             setting.access_token = access_token
-            if refresh_token:
-                setting.refresh_token = refresh_token
             setting.token_expiry = expiry_time
             setting.connected_email = connected_email or 'unknown@google.com'
             setting.storage_usage = storage_usage
@@ -269,7 +275,10 @@ class GoogleDriveViewSet(viewsets.ViewSet):
             # Verify root folder ID if specified
             root_id = setting.root_folder_id or drive_service.get_root_folder_id()
             if root_id and root_id.lower() != 'default':
-                service.files().get(fileId=root_id, fields='id').execute()
+                try:
+                    service.files().get(fileId=root_id, fields='id', supportsAllDrives=True).execute()
+                except Exception as folder_err:
+                    logger.warning(f"Root folder ID '{root_id}' is not accessible by the connected account ({setting.connected_email}): {folder_err}")
 
             # Refresh storage quota details
             quota_res = service.about().get(fields='storageQuota').execute()

@@ -2,28 +2,52 @@ import React, { useEffect, useState } from 'react';
 import { 
   Box, Typography, Table, TableBody, TableCell, TableContainer, 
   TableHead, TableRow, Paper, CircularProgress, Alert, TextField, 
-  InputAdornment, TablePagination, Chip, Avatar, Card
+  InputAdornment, TablePagination, Chip, Avatar, Card, Grid,
+  Tooltip, Tabs, Tab
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import SecurityIcon from '@mui/icons-material/Security';
 import HistoryIcon from '@mui/icons-material/History';
+import AddCircleOutlinedIcon from '@mui/icons-material/AddCircleOutlined';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
+import LockOpenIcon from '@mui/icons-material/LockOpen';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import FolderIcon from '@mui/icons-material/Folder';
+import DescriptionIcon from '@mui/icons-material/Description';
+import PeopleIcon from '@mui/icons-material/People';
+import ComputerIcon from '@mui/icons-material/Computer';
 
 import api from '../services/api';
 
-const MODULE_COLORS = {
-  'Users': { bg: 'rgba(var(--violet-rgb), 0.12)', color: 'var(--violet)' },
-  'Folders': { bg: 'rgba(59, 130, 246, 0.12)', color: '#3B82F6' },
-  'Files': { bg: 'rgba(16, 185, 129, 0.12)', color: '#10B981' },
-  'Auth': { bg: 'rgba(245, 158, 11, 0.12)', color: '#F59E0B' },
-  'System': { bg: 'rgba(249, 115, 22, 0.12)', color: '#F97316' },
+/* Module Color Styles */
+const MODULE_CONFIG = {
+  'Users': { label: 'User Admin', bg: 'rgba(147, 51, 234, 0.12)', color: '#9333EA', icon: <PeopleIcon fontSize="small" /> },
+  'Folders': { label: 'Repositories', bg: 'rgba(59, 130, 246, 0.12)', color: '#3B82F6', icon: <FolderIcon fontSize="small" /> },
+  'Files': { label: 'Documents', bg: 'rgba(16, 185, 129, 0.12)', color: '#10B981', icon: <DescriptionIcon fontSize="small" /> },
+  'MOUs': { label: 'Agreements', bg: 'rgba(245, 158, 11, 0.12)', color: '#F59E0B', icon: <DescriptionIcon fontSize="small" /> },
+  'Auth': { label: 'Security', bg: 'rgba(239, 68, 68, 0.12)', color: '#EF4444', icon: <SecurityIcon fontSize="small" /> },
+  'Default': { label: 'System', bg: 'rgba(100, 116, 139, 0.12)', color: '#64748B', icon: <ComputerIcon fontSize="small" /> },
 };
 
 const getModuleStyle = (module = '') => {
-  for (const k of Object.keys(MODULE_COLORS)) {
-    if (module.toLowerCase().includes(k.toLowerCase())) return MODULE_COLORS[k];
+  for (const k of Object.keys(MODULE_CONFIG)) {
+    if (module.toLowerCase().includes(k.toLowerCase())) return MODULE_CONFIG[k];
   }
-  return { bg: 'rgba(100, 116, 139, 0.12)', color: '#64748B' };
+  return MODULE_CONFIG.Default;
+};
+
+/* Action Type Badges */
+const ACTION_TYPES = {
+  'CREATE': { label: 'Created / Added', color: '#10B981', bg: 'rgba(16,185,129,0.12)', icon: <AddCircleOutlinedIcon fontSize="small" /> },
+  'UPDATE': { label: 'Updated / Modified', color: '#3B82F6', bg: 'rgba(59,130,246,0.12)', icon: <EditIcon fontSize="small" /> },
+  'DELETE': { label: 'Deleted / Removed', color: '#EF4444', bg: 'rgba(239,68,68,0.12)', icon: <DeleteOutlinedIcon fontSize="small" /> },
+  'AUTH': { label: 'Authentication', color: '#F59E0B', bg: 'rgba(245,158,11,0.12)', icon: <LockOpenIcon fontSize="small" /> },
+  'INFO': { label: 'System Event', color: '#8B5CF6', bg: 'rgba(139,92,246,0.12)', icon: <InfoOutlinedIcon fontSize="small" /> },
+};
+
+const getActionTypeStyle = (type = 'INFO') => {
+  return ACTION_TYPES[type] || ACTION_TYPES.INFO;
 };
 
 const ActivityLog = () => {
@@ -31,6 +55,7 @@ const ActivityLog = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
+  const [activeTab, setActiveTab] = useState('ALL');
   
   // Pagination
   const [page, setPage] = useState(0);
@@ -62,38 +87,60 @@ const ActivityLog = () => {
     setPage(0);
   };
 
-  // Filter logs by search query
-  const filteredLogs = logs.filter(log => 
-    log.action.toLowerCase().includes(search.toLowerCase()) ||
-    log.module.toLowerCase().includes(search.toLowerCase()) ||
-    (log.user?.email || 'system').toLowerCase().includes(search.toLowerCase()) ||
-    (log.ip_address || '').includes(search)
-  );
+  // Filter logs by search & tab
+  const filteredLogs = logs.filter(log => {
+    const actionStr = (log.formatted_action || log.action || '').toLowerCase();
+    const rawActionStr = (log.action || '').toLowerCase();
+    const modStr = (log.module || '').toLowerCase();
+    const userStr = (log.user?.name || log.user?.email || 'system').toLowerCase();
+    const ipStr = (log.ip_address || '').toLowerCase();
+    const q = search.toLowerCase();
+
+    const matchesSearch = actionStr.includes(q) || rawActionStr.includes(q) || modStr.includes(q) || userStr.includes(q) || ipStr.includes(q);
+
+    if (!matchesSearch) return false;
+
+    if (activeTab === 'ALL') return true;
+    if (activeTab === 'FILES') return modStr.includes('file') || modStr.includes('folder');
+    if (activeTab === 'MOUS') return modStr.includes('mou');
+    if (activeTab === 'USERS') return modStr.includes('user') || modStr.includes('role');
+    if (activeTab === 'AUTH') return modStr.includes('auth') || rawActionStr.includes('login') || rawActionStr.includes('logout');
+
+    return true;
+  });
+
+  // Calculate quick statistics
+  const totalLogs = logs.length;
+  const uniqueUsers = new Set(logs.map(l => l.user?.email).filter(Boolean)).size;
+  const securityEvents = logs.filter(l => (l.action_type === 'AUTH' || l.action_type === 'DELETE')).length;
 
   return (
     <Box sx={{ flexGrow: 1 }} className="animate-fade-slide-up">
-      {/* Header */}
+      {/* Header Banner */}
       <Box sx={{ mb: 3.5, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Avatar sx={{ bgcolor: 'rgba(249, 115, 22, 0.12)', color: '#F97316', width: 44, height: 44, borderRadius: '14px' }}>
-            <SecurityIcon />
+          <Avatar sx={{ bgcolor: 'rgba(249, 115, 22, 0.12)', color: '#F97316', width: 46, height: 46, borderRadius: '14px' }}>
+            <SecurityIcon fontSize="medium" />
           </Avatar>
           <Box>
-            <Typography variant="h5" sx={{ fontWeight: 800 }}>
-              Security Audit Trail
+            <Typography variant="h5" sx={{ fontWeight: 800, letterSpacing: '-0.01em' }}>
+              System Activity &amp; Audit Trail
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Permanent, read-only system log of all administrative and user operations.
+              Permanent, human-readable audit log tracking all administrative, agreement, and user operations.
             </Typography>
           </Box>
         </Box>
 
         <TextField
           size="small"
-          placeholder="Search logs by user, action, IP..."
+          placeholder="Search logs by action, user, IP..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          sx={{ width: 280 }}
+          sx={{ 
+            width: { xs: '100%', sm: 300 },
+            '& .MuiOutlinedInput-root': { borderRadius: '20px' }
+          }}
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
@@ -104,23 +151,49 @@ const ActivityLog = () => {
         />
       </Box>
 
-      {/* Living Changelog Summary Panel for New Admins */}
-      <Card sx={{ mb: 3.5, p: 2.5, borderRadius: '18px', border: '1px solid', borderColor: 'divider', background: 'linear-gradient(135deg, rgba(var(--indigo-rgb), 0.04) 0%, rgba(var(--violet-rgb), 0.04) 100%)' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-          <HistoryIcon sx={{ color: 'primary.main', fontSize: '1.2rem' }} />
-          <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
-            Recent System Changelog & History
-          </Typography>
-        </Box>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5, fontSize: '0.78rem', lineHeight: 1.6 }}>
-          A quick glance at system configuration updates, user permission modifications, and template activities for quick onboarding of new administrators.
-        </Typography>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-          <Chip label="Latest 50 System Events Recorded" size="small" sx={{ bgcolor: 'rgba(var(--indigo-rgb), 0.1)', color: 'var(--indigo)', fontWeight: 700 }} />
-          <Chip label="Automated Daily Backup Active" size="small" sx={{ bgcolor: 'rgba(16,185,129,0.1)', color: '#10B981', fontWeight: 700 }} />
-          <Chip label="Immutable Audit Logs" size="small" sx={{ bgcolor: 'rgba(245,158,11,0.1)', color: '#F59E0B', fontWeight: 700 }} />
-        </Box>
-      </Card>
+      {/* Audit Highlights Cards */}
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        {[
+          { title: 'Total Recorded Operations', count: totalLogs, label: 'Immutable System Log', color: '#4F46E5', icon: <HistoryIcon /> },
+          { title: 'Active System Users', count: uniqueUsers, label: 'Logged operations', color: '#3B82F6', icon: <PeopleIcon /> },
+          { title: 'Security & Auth Events', count: securityEvents, label: 'Logins & Deletions', color: '#F59E0B', icon: <SecurityIcon /> },
+        ].map((item) => (
+          <Grid item xs={12} sm={4} key={item.title}>
+            <Card sx={{ p: 2.2, borderRadius: '16px', border: '1px solid', borderColor: 'divider', boxShadow: 'none' }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Box>
+                  <Typography variant="caption" sx={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.6px', color: 'text.secondary' }}>
+                    {item.title}
+                  </Typography>
+                  <Typography variant="h5" sx={{ fontWeight: 900, color: item.color, mt: 0.2 }}>
+                    {item.count}
+                  </Typography>
+                </Box>
+                <Avatar sx={{ bgcolor: `${item.color}15`, color: item.color, borderRadius: '12px', width: 40, height: 40 }}>
+                  {item.icon}
+                </Avatar>
+              </Box>
+            </Card>
+          </Grid>
+        ))}
+      </Grid>
+
+      {/* Filter Tabs */}
+      <Box sx={{ mb: 2.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+        <Tabs
+          value={activeTab}
+          onChange={(e, val) => { setActiveTab(val); setPage(0); }}
+          sx={{
+            '& .MuiTab-root': { fontWeight: 700, fontSize: '0.84rem', py: 1 }
+          }}
+        >
+          <Tab value="ALL" label="All Activities" />
+          <Tab value="FILES" label="Documents & Folders" />
+          <Tab value="MOUS" label="Agreements & MOUs" />
+          <Tab value="USERS" label="User Administration" />
+          <Tab value="AUTH" label="Security & Logins" />
+        </Tabs>
+      </Box>
 
       {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 
@@ -132,67 +205,106 @@ const ActivityLog = () => {
             <Table size="small">
               <TableHead sx={{ bgcolor: (t) => t.palette.mode === 'dark' ? 'rgba(255,255,255,0.02)' : '#F8FAFC' }}>
                 <TableRow>
-                  <TableCell sx={{ fontWeight: 700, py: 1.8 }}>Timestamp</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>User / Agent</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>Action</TableCell>
+                  <TableCell sx={{ fontWeight: 700, py: 1.8 }}>User / Actor</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Activity Description</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Type</TableCell>
                   <TableCell sx={{ fontWeight: 700 }}>Module</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>IP Address</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Time</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 700, pr: 2 }}>IP Address</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {filteredLogs.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} sx={{ textAlign: 'center', py: 5 }}>
+                    <TableCell colSpan={6} sx={{ textAlign: 'center', py: 5 }}>
                       <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                        No audit records match your search criteria.
+                        No activity records found matching your filter criteria.
                       </Typography>
                     </TableCell>
                   </TableRow>
                 ) : (
                   filteredLogs
                     .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                    .map((log, idx) => {
+                    .map((log) => {
                       const modStyle = getModuleStyle(log.module);
+                      const typeStyle = getActionTypeStyle(log.action_type);
+                      const displayAction = log.formatted_action || log.action;
+                      const userName = log.user?.name || log.user?.email || 'System Automator';
+                      const userInitial = userName.charAt(0).toUpperCase();
+
                       return (
                         <TableRow 
                           key={log.id} 
                           hover 
-                          sx={{ 
-                            animation: `slideUp 0.3s ease ${idx * 30}ms both`,
-                            '&:last-child td': { border: 0 } 
-                          }}
+                          sx={{ '&:last-child td': { border: 0 } }}
                         >
-                          <TableCell sx={{ py: 1.4 }}>
-                            <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary' }}>
-                              {new Date(log.created_at).toLocaleString()}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Avatar sx={{ width: 24, height: 24, fontSize: '0.7rem', bgcolor: 'primary.main', fontWeight: 700 }}>
-                                {log.user?.email?.charAt(0).toUpperCase() || 'S'}
+                          {/* User Column */}
+                          <TableCell sx={{ py: 1.5 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
+                              <Avatar sx={{ width: 32, height: 32, fontSize: '0.8rem', bgcolor: 'primary.main', fontWeight: 800 }}>
+                                {userInitial}
                               </Avatar>
-                              <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.82rem' }}>
-                                {log.user?.email || 'System'}
-                              </Typography>
+                              <Box sx={{ overflow: 'hidden' }}>
+                                <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.83rem' }} noWrap>
+                                  {userName}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+                                  {log.user?.role?.name || (log.user ? 'User' : 'System Process')}
+                                </Typography>
+                              </Box>
                             </Box>
                           </TableCell>
+
+                          {/* Action Description */}
                           <TableCell>
-                            <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.82rem' }}>
-                              {log.action}
+                            <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.84rem', color: 'text.primary' }}>
+                              {displayAction}
                             </Typography>
                           </TableCell>
+
+                          {/* Action Type Badge */}
                           <TableCell>
                             <Chip 
-                              label={log.module} 
+                              icon={typeStyle.icon}
+                              label={typeStyle.label}
                               size="small" 
-                              sx={{ bgcolor: modStyle.bg, color: modStyle.color, fontWeight: 700, borderRadius: '6px', fontSize: '0.7rem' }} 
+                              sx={{ 
+                                bgcolor: typeStyle.bg, 
+                                color: typeStyle.color, 
+                                fontWeight: 800, 
+                                borderRadius: '8px', 
+                                fontSize: '0.7rem',
+                                '& .MuiChip-icon': { color: typeStyle.color }
+                              }} 
                             />
                           </TableCell>
+
+                          {/* Module Badge */}
                           <TableCell>
-                            <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary', fontWeight: 600 }}>
-                              {log.ip_address || '127.0.0.1'}
-                            </Typography>
+                            <Chip 
+                              label={modStyle.label} 
+                              size="small" 
+                              sx={{ bgcolor: modStyle.bg, color: modStyle.color, fontWeight: 700, borderRadius: '8px', fontSize: '0.7rem' }} 
+                            />
+                          </TableCell>
+
+                          {/* Time Ago with Full Timestamp Tooltip */}
+                          <TableCell>
+                            <Tooltip title={new Date(log.created_at).toLocaleString()} arrow placement="top">
+                              <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.primary', cursor: 'pointer' }}>
+                                {log.time_ago || new Date(log.created_at).toLocaleTimeString()}
+                              </Typography>
+                            </Tooltip>
+                          </TableCell>
+
+                          {/* IP Address */}
+                          <TableCell align="right" sx={{ pr: 2 }}>
+                            <Chip
+                              label={log.ip_address || '127.0.0.1'}
+                              size="small"
+                              variant="outlined"
+                              sx={{ fontFamily: 'monospace', fontSize: '0.72rem', fontWeight: 600 }}
+                            />
                           </TableCell>
                         </TableRow>
                       );

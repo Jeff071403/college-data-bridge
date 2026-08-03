@@ -25,6 +25,7 @@ class DashboardStatsView(APIView):
 
     def get(self, request):
         user = request.user
+        is_super_admin = user.role and user.role.name == "Super Admin"
         is_admin = user.role and user.role.name in ["Super Admin", "Admin"]
 
         # User counts
@@ -32,7 +33,7 @@ class DashboardStatsView(APIView):
         active_users = User.objects.filter(status='Active').count() if is_admin else 0
 
         # Folder and File counts
-        if user.role and user.role.name in ["Super Admin", "Admin"]:
+        if is_admin:
             folders_qs = Folder.objects.all()
             files_qs = File.objects.all()
         else:
@@ -44,14 +45,20 @@ class DashboardStatsView(APIView):
         total_folders = folders_qs.count()
         total_files = files_qs.count()
 
-        # Recent uploads
+        # User specific metrics
+        my_files_qs = File.objects.filter(uploaded_by=user)
+        my_files_count = my_files_qs.count()
+        my_recent_files = my_files_qs.order_by('-created_at')[:5]
+        my_recent_files_serializer = FileSerializer(my_recent_files, many=True, context={'request': request})
+
+        # Recent uploads (general / accessible)
         recent_files = files_qs.order_by('-created_at')[:5]
         recent_files_serializer = FileSerializer(recent_files, many=True, context={'request': request})
 
-        # Recent activities (Admins only)
+        # Recent activities (Admins & Super Admins)
         activities_data = []
         if is_admin:
-            recent_activities = ActivityLog.objects.all().order_by('-created_at')[:5]
+            recent_activities = ActivityLog.objects.all().order_by('-created_at')[:6]
             recent_activities_serializer = ActivityLogSerializer(recent_activities, many=True)
             activities_data = recent_activities_serializer.data
 
@@ -70,6 +77,7 @@ class DashboardStatsView(APIView):
         disk_used = 0
         disk_free = 0
         storage_type = "local"
+        drive_connected = False
 
         drive_setting = GoogleDriveSetting.objects.filter(is_active=True).first()
         if drive_setting and drive_setting.connection_status == 'Connected':
@@ -77,6 +85,7 @@ class DashboardStatsView(APIView):
             disk_used = drive_setting.storage_usage or 0
             disk_free = (disk_total - disk_used) if disk_total >= disk_used else 0
             storage_type = "google_drive"
+            drive_connected = True
         else:
             try:
                 usage = shutil.disk_usage(media_root if media_root else '.')
@@ -208,17 +217,20 @@ class DashboardStatsView(APIView):
             "active_users": active_users,
             "total_folders": total_folders,
             "total_files": total_files,
+            "my_files_count": my_files_count,
             "active_mous": active_mous,
             "pending_approval": pending_approval,
             "expiring_30_days": expiring_30,
             "distribution_data": mou_distribution_data,
             "trend_data": trend_months,
             "recent_uploads": recent_files_serializer.data,
+            "my_recent_uploads": my_recent_files_serializer.data,
             "recent_folders": recent_folders_serializer.data,
             "recent_activities": activities_data,
             "latest_notifications": notifications_serializer.data,
             "storage": {
                 "storage_type": storage_type,
+                "drive_connected": drive_connected,
                 "disk_total_bytes": disk_total,
                 "disk_used_bytes": disk_used,
                 "disk_free_bytes": disk_free,

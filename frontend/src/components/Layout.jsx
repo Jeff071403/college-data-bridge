@@ -956,11 +956,15 @@ const Layout = ({ children }) => {
         sx={{
           flexGrow: 1,
           minWidth: 0,
-          p: 2.5,
+          px: { xs: 1.5, sm: 2.5, md: 3 },
+          py: { xs: 2, md: 2.5 },
           mt: 8,
           mb: { xs: 8, md: 0 },
           bgcolor: 'background.default',
-          overflow: 'hidden',
+          boxSizing: 'border-box',
+          width: '100%',
+          maxWidth: '100%',
+          overflowX: 'hidden',
         }}
       >
         {children}

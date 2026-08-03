@@ -183,10 +183,12 @@ def create_folder(name, parent_id=None):
             'mimeType': 'application/vnd.google-apps.folder'
         }
         
-        if target_parent:
+        if target_parent and folder_exists(target_parent):
             file_metadata['parents'] = [target_parent]
+        else:
+            logger.info(f"Target parent folder '{target_parent}' not found or inaccessible. Creating folder '{name}' in root directory.")
             
-        logger.info(f"Attempting to create folder '{name}' on Google Drive under parent '{target_parent}'...")
+        logger.info(f"Attempting to create folder '{name}' on Google Drive...")
         folder = service.files().create(body=file_metadata, fields='id, name', supportsAllDrives=True).execute()
         logger.info(f"Created Google Drive folder '{name}' (ID: {folder.get('id')})")
         return folder.get('id')
@@ -231,7 +233,7 @@ def upload_file(file_content, filename, mime_type, parent_id=None):
             'name': filename
         }
         
-        if target_parent:
+        if target_parent and folder_exists(target_parent):
             file_metadata['parents'] = [target_parent]
             
         # Wrap content in a BytesIO buffer if raw bytes
